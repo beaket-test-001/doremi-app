@@ -10,6 +10,26 @@ const base = {
   onContinue: () => {},
 }
 
+describe('홈 — 와이어 정합', () => {
+  it('화면 최상단에 앱 타이틀을 보여준다', () => {
+    render(<Home {...base} />)
+    expect(screen.getByRole('heading', { name: '도레미 🎹' })).toBeInTheDocument()
+  })
+
+  it('이어하기 버튼에 ▶ 글리프를 붙이되 접근성 이름은 깨끗하게 유지한다', () => {
+    render(<Home {...base} completed={[1]} />)
+    const cta = screen.getByRole('button', { name: '레슨 2 이어하기' })
+    expect(cta).toHaveTextContent('▶')
+    // 스크린리더가 "검은 오른쪽 삼각형" 을 읽지 않도록 장식은 aria-hidden
+    expect(cta.querySelector('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it('전체 복습하기에는 ▶ 를 붙이지 않는다 (와이어 미규정)', () => {
+    render(<Home {...base} completed={[1, 2, 3, 4, 5]} />)
+    expect(screen.getByRole('button', { name: '전체 복습하기' })).not.toHaveTextContent('▶')
+  })
+})
+
 describe('홈 — 스트릭 카드', () => {
   it('연속 일수를 보여준다', () => {
     render(<Home {...base} practiceDates={['2026-09-07', '2026-09-08', '2026-09-09']} />)

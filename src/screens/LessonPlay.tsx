@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { withObjectParticle } from '../core/korean'
 import {
   currentStep,
   highlightNote,
@@ -165,7 +166,13 @@ export function LessonPlay({
           aria-valuetext={`${totalSteps}개 중 ${state.stepIndex + 1}번째 스텝`}
         >
           {lesson.steps.map((_, i) => (
-            <span key={i} className={i <= state.stepIndex ? 'dot dot--on' : 'dot'} />
+            <span
+              key={i}
+              className="dot"
+              data-testid="step-dot"
+              // 채워진(done) 도트 수 = aria-valuenow(완료 스텝 수) 로 시각과 낭독을 맞춘다
+              data-state={i < state.stepIndex ? 'done' : i === state.stepIndex ? 'current' : 'todo'}
+            />
           ))}
         </span>
       </header>
@@ -185,7 +192,9 @@ export function LessonPlay({
         <>
           <div className="lesson__body">
             {step.type === 'find_key' ? (
-              <p className="lesson__prompt">{`${SOLFEGE[step.note]}를 찾아 눌러보세요`}</p>
+              <p className="lesson__prompt">
+                {`${withObjectParticle(SOLFEGE[step.note])} 찾아 눌러보세요`}
+              </p>
             ) : (
               <>
                 <p className="lesson__phrase">{step.label}</p>

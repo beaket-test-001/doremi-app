@@ -8,6 +8,11 @@ describe('레슨 목록', () => {
   beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }))
   afterEach(() => vi.useRealTimers())
 
+  it('화면 제목 "레슨" 을 보여준다', () => {
+    render(<LessonList completed={[]} currentLesson={1} onOpen={() => {}} />)
+    expect(screen.getByRole('heading', { name: '레슨' })).toBeInTheDocument()
+  })
+
   it('레슨 5개를 번호와 제목으로 보여준다', () => {
     render(<LessonList completed={[]} currentLesson={1} onOpen={() => {}} />)
     const items = screen.getAllByRole('listitem')
@@ -49,7 +54,8 @@ describe('레슨 목록', () => {
   it('진행 중인 레슨은 스텝 진행률을 보여준다', () => {
     render(<LessonList completed={[1]} currentLesson={2} currentStep={3} onOpen={() => {}} />)
     // 레슨 2는 스텝 8개
-    expect(screen.getByRole('button', { name: /2\. / })).toHaveTextContent('3/8')
+    // 와이어 표기: ▶️ 3. 첫 곡: 비행기 (2/4)
+    expect(screen.getByRole('button', { name: /2\. / })).toHaveTextContent('(3/8)')
   })
 
   it('잠금 안내는 잠시 뒤 사라진다', async () => {

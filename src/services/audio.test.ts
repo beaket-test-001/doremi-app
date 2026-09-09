@@ -156,6 +156,37 @@ describe('오디오 엔진', () => {
     })
   })
 
+  describe('백그라운드 복귀', () => {
+    it('컨텍스트가 다시 suspended 되면 다음 unlock 에서 재resume 한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      expect(mock.ctx.resume).toHaveBeenCalledTimes(1)
+
+      // iOS 는 백그라운드 전환 시 컨텍스트를 suspended · interrupted 로 만든다
+      mock.ctx.state = 'suspended'
+      await engine.unlock()
+      expect(mock.ctx.resume).toHaveBeenCalledTimes(2)
+      expect(mock.ctx.state).toBe('running')
+    })
+
+    it('running 상태에서는 중복 resume 하지 않는다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      await engine.unlock()
+      await engine.unlock()
+      expect(mock.ctx.resume).toHaveBeenCalledTimes(1)
+    })
+
+    it('재resume 시 AudioContext 는 새로 만들지 않는다', async () => {
+      const spy = vi.fn(factory)
+      const engine = createAudioEngine({ contextFactory: spy })
+      await engine.unlock()
+      mock.ctx.state = 'suspended'
+      await engine.unlock()
+      expect(spy).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('발음', () => {
     it('unlock 직후 동기 호출한 play도 소리가 난다 (첫 터치 무음 회귀 방지)', async () => {
       const engine = createAudioEngine({ contextFactory: factory })

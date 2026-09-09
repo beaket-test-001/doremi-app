@@ -46,6 +46,8 @@ export function Home({
 
   return (
     <div className="home">
+      <h1 className="home__title">도레미 🎹</h1>
+
       <p className="home__streak">
         {days > 0 ? `🔥 ${days}일 연속 연습 중!` : '오늘부터 시작해 볼까요?'}
       </p>
@@ -55,6 +57,8 @@ export function Home({
         className="btn btn--primary home__cta"
         onClick={() => onContinue(allDone ? LESSONS[0].id : nextLesson)}
       >
+        {/* 와이어의 ▶ 는 장식 — 스크린리더가 "검은 오른쪽 삼각형" 을 읽지 않게 숨긴다 */}
+        {allDone ? null : <span aria-hidden="true">▶ </span>}
         {ctaLabel}
       </button>
 

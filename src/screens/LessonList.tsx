@@ -56,6 +56,8 @@ export function LessonList({
 
   return (
     <>
+      <h1 className="screen__title">레슨</h1>
+
       <ul className="lessons">
         {LESSONS.map((lesson) => {
           const state = stateOf(lesson.id)
@@ -78,7 +80,7 @@ export function LessonList({
                 </span>
                 {showProgress ? (
                   <span className="lessons__progress" aria-hidden="true">
-                    {currentStep}/{lesson.steps.length}
+                    ({currentStep}/{lesson.steps.length})
                   </span>
                 ) : null}
                 <span className="sr-only">

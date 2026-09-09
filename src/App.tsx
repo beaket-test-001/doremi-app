@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { completeLesson, nextIncompleteLesson, stepFor } from './core/progress'
 import { LESSONS } from './data/lessons'
 import { FreePlay } from './screens/FreePlay'
@@ -23,6 +23,32 @@ const TAB_IDS = Object.keys(TAB_LABELS) as TabId[]
 
 /** 자유 연습에서 이만큼 치면 그날 '연습함' 으로 인정 (그날 누적, 세션 무관) */
 const FREE_PLAY_NOTES_FOR_PRACTICE = 10
+
+/**
+ * 엣지 케이스 안내(저장 불가 배너 · 가로 회전 오버레이)는 사양상 "전 화면 공통" 이므로
+ * 레슨 플레이 전체 화면에서도 보여야 한다. 두 분기가 이 껍데기를 공유한다.
+ *
+ * App 안에 정의하면 렌더마다 컴포넌트 정체성이 바뀌어 하위 트리가 언마운트되고
+ * LessonPlay 의 진행 상태가 날아간다 — 반드시 모듈 레벨에 둔다.
+ */
+function Shell({ canSave, children }: { canSave: boolean; children: ReactNode }) {
+  return (
+    <div className="app">
+      {/* 세로 화면 고정: 가로에서는 CSS 미디어쿼리로 이 안내만 덮어 보여준다 */}
+      <div className="landscape-warn" role="alert">
+        세로 화면으로 돌려주세요
+      </div>
+
+      {canSave ? null : (
+        <p className="banner" role="status">
+          이 브라우저에서는 진도가 저장되지 않아요
+        </p>
+      )}
+
+      {children}
+    </div>
+  )
+}
 
 export interface AppProps {
   storage?: Storage
@@ -91,7 +117,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
 
   if (openLesson) {
     return (
-      <div className="app">
+      <Shell canSave={canSave}>
         <LessonPlay
           key={openLesson.id}
           lesson={openLesson}
@@ -128,24 +154,12 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
             else setOpenLessonId(null)
           }}
         />
-      </div>
+      </Shell>
     )
   }
 
   return (
-    <div className="app">
-      {/* 세로 화면 고정: 가로에서는 CSS 미디어쿼리로 이 안내만 덮어 보여준다 */}
-      <div className="landscape-warn" role="alert">
-        세로 화면으로 돌려주세요
-      </div>
-
-      {/* 저장 불가 안내는 전 화면 공통이므로 탭 껍데기에 둔다 */}
-      {canSave ? null : (
-        <p className="banner" role="status">
-          이 브라우저에서는 진도가 저장되지 않아요
-        </p>
-      )}
-
+    <Shell canSave={canSave}>
       {TAB_IDS.map((id) => (
         <main
           key={id}
@@ -201,7 +215,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
           </button>
         ))}
       </nav>
-    </div>
+    </Shell>
   )
 }
 

@@ -83,7 +83,10 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   }
 
   function unlock(): Promise<void> {
-    if (unlockPromise) return unlockPromise
+    // running 이면 이미 열려 있으니 캐시된 프로미스를 그대로 준다.
+    // iOS 는 백그라운드 전환 시 컨텍스트를 suspended · interrupted 로 만드는데,
+    // 무조건 캐시를 반환하면 복귀 후 resume 을 다시 시도하지 못해 계속 무음이 된다.
+    if (unlockPromise && ctx?.state === 'running') return unlockPromise
 
     const context = ensureContext()
     if (!context) return Promise.resolve() // 오디오 없이도 화면은 써야 한다

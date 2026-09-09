@@ -112,6 +112,33 @@ describe('App 셸', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(5)
   })
 
+  it('가로 회전 안내는 레슨 플레이 화면에서도 렌더된다 (전 화면 공통)', async () => {
+    mount()
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    expect(
+      screen.getAllByRole('alert').some((el) => el.textContent?.includes('세로 화면')),
+    ).toBe(true)
+  })
+
+  it('저장 불가 배너는 레슨 플레이 화면에서도 렌더된다 (전 화면 공통)', async () => {
+    const broken = createStorage({
+      getItem: () => {
+        throw new Error('SecurityError')
+      },
+      setItem: () => {
+        throw new Error('SecurityError')
+      },
+      removeItem: () => {
+        throw new Error('SecurityError')
+      },
+    })
+    mount({ storage: broken })
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    expect(screen.getByText('이 브라우저에서는 진도가 저장되지 않아요')).toBeInTheDocument()
+  })
+
   it('레슨을 열면 탭바 없이 전체 화면으로 전환된다', async () => {
     mount()
     await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
