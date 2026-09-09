@@ -7,6 +7,7 @@
   --text: #f2f2f7;
   --muted: #9a9aab;
   --accent: #4c8dff;
+  --screen-pad: 16px;
   color-scheme: dark;
 }
 
@@ -43,7 +44,7 @@ body {
 .screen {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 16px;
+  padding: 20px var(--screen-pad);
 }
 
 .placeholder {
@@ -89,4 +90,60 @@ body {
     color: var(--text);
     font-size: 17px;
   }
+}
+
+/* ── 건반 ─────────────────────────────────────────────
+   흰건반 7개(도~시)만. 터치 타깃 44×44px 은 두 축 모두 지켜야 하므로
+   .screen 좌우 패딩을 음수 마진으로 상쇄해 화면 폭을 전부 쓴다.
+   320px 기준: (320 - gap 1px×6) / 7 = 약 44.9px → 폭 요건 충족. */
+.keyboard {
+  display: flex;
+  gap: 1px;
+  margin: 0 calc(-1 * var(--screen-pad));
+  height: 200px;
+  user-select: none;
+}
+
+.key {
+  flex: 1;
+  min-width: 0; /* 320px 에서 7개가 잘리지 않게 축소를 허용 */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12px;
+  border: 0;
+  border-radius: 0 0 8px 8px;
+  background: #f7f7fa;
+  color: #3a3a48;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  /* 플래시는 150ms 만 보여야 하므로 전환도 그 안에 끝낸다 */
+  transition: background 120ms ease-out;
+}
+
+.key:active {
+  background: #dcdce4;
+}
+
+/* 눌러야 할 건반 = 파란 하이라이트 */
+.key[data-highlight='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── 자유 연습 ───────────────────────────────────── */
+.freeplay {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 15px;
 }

@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { createAudioEngine } from './services/audio'
+import { FreePlay } from './screens/FreePlay'
 
 // 하단 탭 3개. '레슨 플레이'는 탭 없이 전체 화면으로 열리므로 여기 포함하지 않는다.
 const TAB_LABELS = {
@@ -13,6 +15,13 @@ const TAB_IDS = Object.keys(TAB_LABELS) as TabId[]
 
 export function App() {
   const [tab, setTab] = useState<TabId>('home')
+  const audio = useMemo(() => createAudioEngine(), [])
+
+  // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData".
+  // 디코드는 suspended 컨텍스트에서도 되므로 unlock 을 기다릴 필요가 없다.
+  useEffect(() => {
+    audio.loadSamples().catch(() => {})
+  }, [audio])
 
   return (
     <div className="app">
@@ -32,7 +41,11 @@ export function App() {
           hidden={id !== tab}
         >
           <h1>{TAB_LABELS[id]}</h1>
-          <p className="placeholder">화면 구현 예정</p>
+          {id === 'practice' ? (
+            <FreePlay audio={audio} />
+          ) : (
+            <p className="placeholder">화면 구현 예정</p>
+          )}
         </main>
       ))}
 
