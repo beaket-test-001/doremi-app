@@ -343,6 +343,67 @@ describe('레슨 플레이', () => {
     })
   })
 
+  describe('저장 · 스트릭 연동', () => {
+    it('완료 화면에 현재 스트릭을 보여준다 (증가 없어도 표시)', async () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={2}
+          streakDays={4}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      press('도')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      press('레')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      expect(screen.getByText(/현재 스트릭 4일/)).toBeInTheDocument()
+    })
+
+    it('스텝을 완료할 때마다 onStepCompleted 를 부른다', () => {
+      const onStepCompleted = vi.fn()
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={1}
+          audio={fakeEngine()}
+          onStepCompleted={onStepCompleted}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      press('도') // 오답 — 스텝 미완료
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      expect(onStepCompleted).not.toHaveBeenCalled()
+      press('미') // 정답 — 스텝 완료
+      expect(onStepCompleted).toHaveBeenCalledOnce()
+    })
+
+    it('저장 불가면 ✕ 확인 문구가 바뀐다', async () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          canSave={false}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      await userEvent.click(screen.getByRole('button', { name: /닫기/ }))
+      expect(globalThis.confirm).toHaveBeenCalledWith(
+        '그만할까요? 진도가 저장되지 않아요',
+      )
+    })
+  })
+
   describe('이어하기', () => {
     it('스텝이 바뀔 때마다 onStepChange 로 알린다', async () => {
       const onStepChange = vi.fn()

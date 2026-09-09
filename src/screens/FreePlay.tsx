@@ -5,9 +5,11 @@ import type { Note } from '../types'
 
 export interface FreePlayProps {
   audio: AudioEngine
+  /** 한 음 연주될 때마다 호출 — 그날 누적 10음이면 '연습함' 처리된다 */
+  onNotePlayed?: () => void
 }
 
-export function FreePlay({ audio }: FreePlayProps) {
+export function FreePlay({ audio, onNotePlayed }: FreePlayProps) {
   const [showLabels, setShowLabels] = useState(true)
 
   function handlePress(note: Note) {
@@ -18,6 +20,7 @@ export function FreePlay({ audio }: FreePlayProps) {
       // 오디오를 못 열어도 화면 조작은 계속 가능해야 한다
     })
     audio.play(note)
+    onNotePlayed?.()
   }
 
   return (

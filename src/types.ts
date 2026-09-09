@@ -36,3 +36,11 @@ export interface Lesson {
   title: string
   steps: Step[]
 }
+
+// localStorage 스키마 (구현 가이드 '저장 스키마')
+export interface Progress {
+  completedLessons: number[]
+  currentLesson: number
+  /** 다음에 진행할 스텝 인덱스 (0부터) */
+  currentStep: number
+}

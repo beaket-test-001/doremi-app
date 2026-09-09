@@ -349,3 +349,75 @@ body {
   font-size: 16px;
   font-weight: 600;
 }
+
+/* ── 홈 ─────────────────────────────────────────── */
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.banner {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #4a3a1e;
+  color: #ffd479;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.home__streak {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.home__cta {
+  min-height: 72px;
+  font-size: 18px;
+}
+
+.calendar__title {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar__weekday {
+  padding-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.calendar__day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 연습한 날 ● 표시 */
+.calendar__day[data-practiced='true'] {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.lesson__streak {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
