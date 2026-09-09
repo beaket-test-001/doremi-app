@@ -24,3 +24,15 @@ export const NOTE_FREQ: Record<Note, number> = {
   A4: 440,
   B4: 493.8833,
 }
+
+// 스텝 타입은 3가지뿐이다 (레슨 콘텐츠 정의서 '공통 규칙')
+export type Step =
+  | { type: 'intro'; text: string }
+  | { type: 'find_key'; note: Note }
+  | { type: 'play_sequence'; label: string; notes: Note[] }
+
+export interface Lesson {
+  id: number
+  title: string
+  steps: Step[]
+}
