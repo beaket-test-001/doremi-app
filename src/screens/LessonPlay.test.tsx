@@ -7,7 +7,20 @@ import type { Lesson } from '../types'
 import { FLASH_MS, LessonPlay } from './LessonPlay'
 
 function fakeEngine(): AudioEngine {
-  return { unlock: vi.fn(async () => {}), loadSamples: vi.fn(async () => {}), play: vi.fn() }
+  return {
+    unlock: vi.fn(async () => {}),
+    loadSamples: vi.fn(async () => {}),
+    play: vi.fn(),
+    stats: () => ({
+      state: null,
+      baseLatencyMs: null,
+      outputLatencyMs: null,
+      lastDispatchMs: null,
+      maxDispatchMs: null,
+      plays: 0,
+      samplesLoaded: 0,
+    }),
+  }
 }
 
 const L: Lesson = {

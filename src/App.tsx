@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { isDiagnosticsEnabled } from './core/diagnostics'
 import { completeLesson, nextIncompleteLesson, stepFor } from './core/progress'
 import { LESSONS } from './data/lessons'
 import { FreePlay } from './screens/FreePlay'
@@ -8,6 +9,7 @@ import { LessonPlay } from './screens/LessonPlay'
 import { createAnalytics, type Analytics } from './services/analytics'
 import { createAudioEngine, type AudioEngine } from './services/audio'
 import { createStorage, type Storage } from './services/storage'
+import { LatencyPanel } from './widgets/LatencyPanel'
 import { streak, todayStr } from './services/streak'
 
 // 하단 탭 3개. '레슨 플레이'는 탭 없이 전체 화면으로 열리므로 여기 포함하지 않는다.
@@ -31,9 +33,18 @@ const FREE_PLAY_NOTES_FOR_PRACTICE = 10
  * App 안에 정의하면 렌더마다 컴포넌트 정체성이 바뀌어 하위 트리가 언마운트되고
  * LessonPlay 의 진행 상태가 날아간다 — 반드시 모듈 레벨에 둔다.
  */
-function Shell({ canSave, children }: { canSave: boolean; children: ReactNode }) {
+function Shell({
+  canSave,
+  diagnostics,
+  children,
+}: {
+  canSave: boolean
+  diagnostics: ReactNode
+  children: ReactNode
+}) {
   return (
     <div className="app">
+      {diagnostics}
       {/* 세로 화면 고정: 가로에서는 CSS 미디어쿼리로 이 안내만 덮어 보여준다 */}
       <div className="landscape-warn" role="alert">
         세로 화면으로 돌려주세요
@@ -72,6 +83,10 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
   const [openLessonId, setOpenLessonId] = useState<number | null>(null)
   // lesson_complete 의 duration 용 — 레슨 진입 시각
   const lessonStartedAt = useRef(0)
+
+  // QA 전용 — ?diag=1 로만 켜진다
+  const showDiagnostics = isDiagnosticsEnabled(globalThis.location?.search ?? '')
+  const diagnostics = showDiagnostics ? <LatencyPanel audio={engine} /> : null
 
   const today = todayStr()
   const streakDays = streak(practiceDates, today)
@@ -117,7 +132,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
 
   if (openLesson) {
     return (
-      <Shell canSave={canSave}>
+      <Shell canSave={canSave} diagnostics={diagnostics}>
         <LessonPlay
           key={openLesson.id}
           lesson={openLesson}
@@ -159,7 +174,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
   }
 
   return (
-    <Shell canSave={canSave}>
+    <Shell canSave={canSave} diagnostics={diagnostics}>
       {TAB_IDS.map((id) => (
         <main
           key={id}

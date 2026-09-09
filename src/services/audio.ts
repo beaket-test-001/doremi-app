@@ -22,6 +22,21 @@ const SAMPLE_FORMATS = [
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
 
+/** 실기기 지연 판정을 위한 계측값 (구현 가이드 '스파이크 합격 기준') */
+export interface AudioStats {
+  state: AudioContextState | null
+  /** 브라우저가 보고하는 처리 버퍼 지연 (ms) */
+  baseLatencyMs: number | null
+  /** 브라우저가 보고하는 출력까지의 총 지연 (ms). 미지원 브라우저는 null */
+  outputLatencyMs: number | null
+  /** play() 호출 → 재생 예약 완료까지 (ms). 앱이 만드는 지연분 */
+  lastDispatchMs: number | null
+  maxDispatchMs: number | null
+  plays: number
+  /** 샘플이 로드된 음 수 (0 이면 합성음으로 동작 중) */
+  samplesLoaded: number
+}
+
 export interface AudioEngine {
   /** 첫 사용자 제스처에서 호출. 무음 재생으로 오디오 세션을 깨우고 resume (iOS 필수) */
   unlock(): Promise<void>
@@ -29,10 +44,12 @@ export interface AudioEngine {
   loadSamples(): Promise<void>
   /** 즉시 발음. 샘플이 있으면 버퍼, 없으면 합성음 */
   play(note: Note): void
+  /** 지연 계측값. 실기기 QA 에서 체감이 아니라 실측으로 판정하기 위한 것 */
+  stats(): AudioStats
 }
 
 export interface AudioEngineOptions {
-  contextFactory?: () => AudioContext
+  contextFactory?: (options?: AudioContextOptions) => AudioContext
   fetchImpl?: typeof fetch
   /** iOS 무음 스위치 해제용 무음 재생. 테스트에서 교체한다 */
   playSilentAudio?: () => Promise<void>
@@ -50,7 +67,9 @@ async function defaultPlaySilentAudio(): Promise<void> {
 
 export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine {
   const {
-    contextFactory = () => new AudioContext(),
+    // latencyHint: 'interactive' 는 출력 지연에 실제로 영향을 주는 유일한 레버다.
+    // 대부분의 브라우저 기본값이지만 명시해 둔다.
+    contextFactory = (o) => new AudioContext(o),
     fetchImpl = globalThis.fetch?.bind(globalThis),
     playSilentAudio = defaultPlaySilentAudio,
     canPlayType = (mime) => new Audio().canPlayType(mime),
@@ -64,6 +83,10 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   let loadPromise: Promise<void> | null = null
   const samples = new Map<Note, AudioBuffer>()
 
+  let plays = 0
+  let lastDispatchMs: number | null = null
+  let maxDispatchMs: number | null = null
+
   // AudioContext 는 제스처 밖에서 만들어도 된다 (suspended 로 시작할 뿐).
   // 제스처가 필요한 건 resume() 뿐이므로 생성은 동기로 끝낸다 —
   // 이렇게 해야 unlock() 직후의 동기 play() 도 음을 예약할 수 있다.
@@ -74,7 +97,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   function ensureContext(): AudioContext | null {
     if (ctx) return ctx
     try {
-      const context = contextFactory()
+      const context = contextFactory({ latencyHint: 'interactive' })
       const gain = context.createGain()
       gain.gain.value = MASTER_GAIN
       gain.connect(context.destination)
@@ -226,10 +249,34 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
 
   function play(note: Note): void {
     if (!ctx || !master) return // 컨텍스트가 아직 없으면 조용히 무시
+
+    // 앱이 만드는 지연분만 재는 것이다. 브라우저·기기가 만드는 몫은
+    // baseLatency / outputLatency 로 따로 보고된다.
+    const start = performance.now()
     const buffer = samples.get(note)
     if (buffer) playSample(ctx, buffer)
     else playSynth(ctx, note)
+
+    lastDispatchMs = performance.now() - start
+    maxDispatchMs = Math.max(maxDispatchMs ?? 0, lastDispatchMs)
+    plays += 1
   }
 
-  return { unlock, loadSamples, play }
+  function toMs(seconds: number | undefined): number | null {
+    return typeof seconds === 'number' ? seconds * 1000 : null
+  }
+
+  function stats(): AudioStats {
+    return {
+      state: ctx?.state ?? null,
+      baseLatencyMs: toMs(ctx?.baseLatency),
+      outputLatencyMs: toMs(ctx?.outputLatency),
+      lastDispatchMs,
+      maxDispatchMs,
+      plays,
+      samplesLoaded: samples.size,
+    }
+  }
+
+  return { unlock, loadSamples, play, stats }
 }

@@ -464,3 +464,17 @@ body {
   font-size: 22px;
   font-weight: 700;
 }
+
+/* QA 전용 지연 진단 오버레이 (?diag=1 로만 렌더된다) */
+.diag {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px var(--screen-pad);
+  border-bottom: 1px solid var(--border);
+  background: #241f14;
+  color: #ffd479;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
