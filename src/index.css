@@ -1,0 +1,92 @@
+/* 모바일 브라우저 우선 · 최소 지원 폭 320px · 터치 타깃 최소 44px */
+:root {
+  /* --bg 는 index.html 의 theme-color · 인라인 스켈레톤과 같은 값을 유지할 것 */
+  --bg: #12121a;
+  --surface: #1e1e2a;
+  --border: #2c2c3a;
+  --text: #f2f2f7;
+  --muted: #9a9aab;
+  --accent: #4c8dff;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  /* 건반 연주 중 더블탭 확대·스크롤 튐 방지 (확대 자체는 막지 않는다) */
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+}
+
+.placeholder {
+  color: var(--muted);
+}
+
+.tabbar {
+  display: flex;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab {
+  flex: 1;
+  min-height: 56px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tab--active {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 가로 회전 안내 — 세로에서는 숨기고, 가로에서만 전체를 덮는다 */
+.landscape-warn {
+  display: none;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .landscape-warn {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 17px;
+  }
+}
