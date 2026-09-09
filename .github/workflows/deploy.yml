@@ -11,10 +11,10 @@ permissions:
   pages: write
   id-token: write
 
-# 배포는 항상 마지막 커밋 하나만 살린다
+# Pages 배포는 진행 중 run을 취소하지 않는다 (중간 상태로 남을 수 있음)
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

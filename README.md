@@ -32,13 +32,16 @@ npm run build    # 프로덕션 빌드 (타입 체크 포함)
 
 ## 폴더 구조
 
+구현 가이드의 Flutter 구조(`lib/`)를 `src/`로 그대로 대응시킵니다.
+
 ```
 src/
-  main.tsx          진입점
+  main.tsx          진입점                        (← lib/main.dart)
   App.tsx           하단 탭 + 화면 전환
-  types.ts          Note / Step / Lesson / 저장 스키마 타입
-  screens/          home · lesson_list · lesson_play · free_play
-  components/       keyboard 등 공통 UI
-  services/         audio · storage · streak · analytics
-  data/lessons.ts   레슨 5개 데이터
+  screens/          home · lesson_list · lesson_play · free_play   (예정)
+  widgets/          keyboard · streak_card · practice_calendar     (예정)
+  services/         audio · storage · streak · analytics           (예정)
+  data/lessons.ts   레슨 5개 데이터                                (예정)
 ```
+
+`(예정)` 표시는 아직 만들지 않은 디렉터리입니다 — 해당 기능 PR에서 추가합니다.

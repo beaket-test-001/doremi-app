@@ -2,17 +2,14 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#12121a" />
     <meta name="description" content="피아노 입문자를 위한 하루 10분 학습 앱" />
     <title>도레미 🎹</title>
 
     <!--
       GA4: 측정 ID 발급 후 아래 주석을 해제하고 G-XXXX를 교체한다.
-      발급 전까지는 analytics.ts가 console 출력으로 대체 동작한다.
+      발급 전까지는 분석 래퍼(추후 추가)가 console 출력으로 대체 동작한다.
       <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXX"></script>
       <script>
         window.dataLayer = window.dataLayer || [];
@@ -22,25 +19,60 @@
       </script>
     -->
 
-    <!-- 첫 로드 체감 완화: JS 번들 평가 전까지 보여줄 인라인 스켈레톤 -->
+    <!--
+      첫 로드 체감 완화: JS 번들 평가 전까지 보여줄 인라인 스켈레톤.
+      CSS 로드 전에 그려야 하므로 색은 리터럴로 둔다 — index.css의 --bg 와 같은 값을 유지할 것.
+    -->
     <style>
       body {
         margin: 0;
         background: #12121a;
       }
+      /* 텍스트 인디케이터가 아니라 화면 구조를 흉내낸 스켈레톤 (구현 가이드) */
       #boot {
         display: flex;
+        flex-direction: column;
         height: 100vh;
-        align-items: center;
-        justify-content: center;
-        color: #9a9aab;
-        font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif;
-        font-size: 15px;
+        max-width: 480px;
+        margin: 0 auto;
+      }
+      #boot .b-screen {
+        flex: 1;
+        padding: 20px 16px;
+      }
+      #boot .b-line {
+        height: 20px;
+        margin-bottom: 12px;
+        border-radius: 6px;
+        background: #1e1e2a;
+      }
+      #boot .b-line.w60 {
+        width: 60%;
+      }
+      #boot .b-cta {
+        height: 64px;
+        margin-top: 24px;
+        border-radius: 12px;
+        background: #1e1e2a;
+      }
+      #boot .b-tabbar {
+        height: 56px;
+        border-top: 1px solid #2c2c3a;
+        background: #1e1e2a;
       }
     </style>
   </head>
   <body>
-    <div id="root"><div id="boot">도레미 🎹 불러오는 중…</div></div>
+    <div id="root">
+      <div id="boot" aria-hidden="true">
+        <div class="b-screen">
+          <div class="b-line w60"></div>
+          <div class="b-line"></div>
+          <div class="b-cta"></div>
+        </div>
+        <div class="b-tabbar"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

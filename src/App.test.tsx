@@ -22,4 +22,22 @@ describe('App 셸', () => {
     expect(screen.getByRole('tab', { name: /연습/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/연습/)
   })
+
+  it('탭마다 aria-controls가 실제 존재하는 패널을 가리킨다', () => {
+    const { container } = render(<App />)
+    for (const tab of screen.getAllByRole('tab')) {
+      const id = tab.getAttribute('aria-controls')!
+      expect(container.querySelector(`#${id}`)).not.toBeNull()
+    }
+  })
+
+  it('비활성 패널은 접근성 트리에서 빠진다', () => {
+    render(<App />)
+    expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
+  })
+
+  it('가로 회전 안내를 렌더링한다', () => {
+    render(<App />)
+    expect(screen.getByRole('alert')).toHaveTextContent('세로 화면으로 돌려주세요')
+  })
 })
