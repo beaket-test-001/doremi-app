@@ -478,3 +478,30 @@ body {
   font-size: 11px;
   line-height: 1.4;
 }
+
+.diag__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.diag__btn {
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid currentcolor;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.diag__note {
+  opacity: 0.75;
+}
+
+/* 하한이 목표를 넘으면 확정 실패 — 눈에 띄게 */
+.diag[data-level='fail'] {
+  background: #3a1618;
+  color: #ff9d9d;
+}

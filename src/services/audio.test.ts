@@ -154,10 +154,62 @@ describe('오디오 엔진', () => {
     it('여러 번 연주하면 최댓값이 누적된다', async () => {
       const engine = createAudioEngine({ contextFactory: factory })
       await engine.unlock()
+      const now = performance.now()
+      // 입력 지연 5ms → 40ms → 10ms. 최댓값은 40ms 로 남아야 한다
+      engine.play('C4', now - 5)
+      engine.play('D4', now - 40)
+      engine.play('E4', now - 10)
+      const s = engine.stats()
+      expect(s.plays).toBe(3)
+      expect(s.maxInputMs).toBeGreaterThanOrEqual(40)
+      expect(s.lastInputMs).toBeLessThan(s.maxInputMs!)
+      expect(s.maxDispatchMs).toBeGreaterThanOrEqual(s.lastDispatchMs ?? 0)
+    })
+
+    it('이벤트 시각으로 입력 지연(터치 → 핸들러)을 기록한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() - 37)
+      expect(engine.stats().lastInputMs).toBeGreaterThanOrEqual(37)
+    })
+
+    it('이벤트 시각을 넘기지 않으면 입력 지연은 null 이다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
       engine.play('C4')
-      engine.play('D4')
-      engine.play('E4')
+      expect(engine.stats().lastInputMs).toBeNull()
+    })
+
+    it('비정상적인 이벤트 시각은 버린다 (합성 이벤트 · 시계 역행)', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() + 5000) // 미래
+      engine.play('D4', 0) // timeStamp 0
+      engine.play('E4', performance.now() - 999_999) // 비정상적으로 큼
+      expect(engine.stats().lastInputMs).toBeNull()
       expect(engine.stats().plays).toBe(3)
+    })
+
+    it('baseLatency 가 0 이어도 null 로 뭉개지 않는다', async () => {
+      mock.ctx.baseLatency = 0
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      // 0 을 falsy 로 처리하면 미지원과 구분되지 않는다
+      expect(engine.stats().baseLatencyMs).toBe(0)
+    })
+
+    it('resetStats 로 최댓값 고착을 해제한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() - 80)
+      expect(engine.stats().maxInputMs).toBeGreaterThanOrEqual(80)
+
+      engine.resetStats()
+      const s = engine.stats()
+      expect(s.plays).toBe(0)
+      expect(s.maxInputMs).toBeNull()
+      expect(s.lastInputMs).toBeNull()
+      expect(s.maxDispatchMs).toBeNull()
     })
   })
 

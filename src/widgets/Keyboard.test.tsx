@@ -42,7 +42,8 @@ describe('건반', () => {
     const onPress = vi.fn()
     render(<Keyboard onPress={onPress} />)
     pointerDown(screen.getByRole('button', { name: '미' }))
-    expect(onPress).toHaveBeenCalledExactlyOnceWith('E4')
+    expect(onPress).toHaveBeenCalledOnce()
+    expect(onPress.mock.calls[0][0]).toBe('E4')
   })
 
   it('마우스 클릭은 pointerdown과 중복 발음하지 않는다', () => {
@@ -62,7 +63,8 @@ describe('건반', () => {
     screen
       .getByRole('button', { name: '라' })
       .dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }))
-    expect(onPress).toHaveBeenCalledExactlyOnceWith('A4')
+    expect(onPress).toHaveBeenCalledOnce()
+    expect(onPress.mock.calls[0][0]).toBe('A4')
   })
 
   it('주 버튼이 아닌 입력(우클릭·휠클릭)은 발음하지 않는다', () => {

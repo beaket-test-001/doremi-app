@@ -14,7 +14,11 @@ export interface KeyboardProps {
   showLabels?: boolean
   /** 정답/오답 플래시 대상. 표시 시간(150ms) 관리는 호출부 책임 */
   flash?: KeyFlash
-  onPress: (note: Note) => void
+  /**
+   * 건반을 눌렀을 때. eventTimeStampMs 는 브라우저가 이벤트를 만든 시각이며
+   * 입력 지연(터치 → 핸들러 진입) 계측에 쓴다 — 실기기 지연 진단의 지배항이다.
+   */
+  onPress: (note: Note, eventTimeStampMs: number) => void
 }
 
 export function Keyboard({ highlight, showLabels = true, flash, onPress }: KeyboardProps) {
@@ -31,12 +35,12 @@ export function Keyboard({ highlight, showLabels = true, flash, onPress }: Keybo
           // 소리 지연을 줄이려면 click(=pointerup 이후)이 아니라 pointerdown 이어야 한다.
           // 우클릭·휠클릭은 컨텍스트 메뉴만 띄우고 발음시키지 않는다.
           onPointerDown={(e) => {
-            if (e.button === 0) onPress(note)
+            if (e.button === 0) onPress(note, e.timeStamp)
           }}
           // Enter/Space 와 스크린리더 활성화는 pointer 이벤트를 만들지 않고
           // detail 0 의 click 만 만든다. 이 경로가 없으면 키보드로는 연주가 불가능하다.
           onClick={(e) => {
-            if (e.detail === 0) onPress(note)
+            if (e.detail === 0) onPress(note, e.timeStamp)
           }}
         >
           {/* 라벨을 숨겨도 스크린리더용 aria-label 은 유지된다 */}

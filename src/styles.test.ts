@@ -29,6 +29,7 @@ function emittedStateAttributes(): string[] {
     'src/screens/Home.tsx',
     'src/screens/LessonList.tsx',
     'src/screens/LessonPlay.tsx',
+    'src/widgets/LatencyPanel.tsx',
   ]
   const found = new Set<string>()
   for (const file of files) {
@@ -67,6 +68,7 @@ describe('상태 속성마다 스타일 규칙이 있다', () => {
     ['시퀀스 현재 음 강조', "[data-current='true']"],
     ['스텝 도트 완료', ".dot[data-state='done']"],
     ['스텝 도트 현재', ".dot[data-state='current']"],
+    ['지연 진단 확정 실패 강조', ".diag[data-level='fail']"],
   ])('%s → %s', (_label, selector) => {
     expect(css).toContain(selector)
   })

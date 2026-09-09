@@ -24,10 +24,13 @@ function fakeAudio(): AudioEngine {
     unlock: vi.fn(async () => {}),
     loadSamples: vi.fn(async () => {}),
     play: vi.fn(),
+    resetStats: vi.fn(),
     stats: () => ({
       state: null,
       baseLatencyMs: null,
       outputLatencyMs: null,
+      lastInputMs: null,
+      maxInputMs: null,
       lastDispatchMs: null,
       maxDispatchMs: null,
       plays: 0,
@@ -454,5 +457,43 @@ describe('GA4 이벤트', () => {
     const done = rec.events.find((e) => e.name === 'lesson_complete')
     expect(done?.params?.lesson_id).toBe(1)
     expect(typeof done?.params?.duration).toBe('number')
+  })
+})
+
+
+describe('진단 패널 배선 (?diag=1)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  function withSearch(search: string) {
+    vi.stubGlobal('location', { ...globalThis.location, search })
+  }
+
+  it('쿼리가 없으면 진단 패널이 없다', () => {
+    withSearch('')
+    mount()
+    expect(screen.queryByRole('region', { name: /오디오 지연 진단/ })).toBeNull()
+  })
+
+  it('?diag=1 이면 탭 화면에 진단 패널이 보인다', () => {
+    withSearch('?diag=1')
+    mount()
+    expect(screen.getByRole('region', { name: /오디오 지연 진단/ })).toBeInTheDocument()
+  })
+
+  it('?diag=1 이면 레슨 플레이 전체 화면에서도 보인다', async () => {
+    // 두 분기 중 한쪽만 배선해도 통과하던 구멍을 막는다
+    withSearch('?diag=1')
+    mount()
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    expect(screen.getByRole('region', { name: /오디오 지연 진단/ })).toBeInTheDocument()
   })
 })
