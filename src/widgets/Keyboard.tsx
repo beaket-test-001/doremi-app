@@ -1,14 +1,23 @@
 import { NOTES, SOLFEGE, type Note } from '../types'
 
+export type Verdict = 'correct' | 'wrong'
+
+export interface KeyFlash {
+  note: Note
+  verdict: Verdict
+}
+
 export interface KeyboardProps {
   /** 눌러야 할 건반 — 파란 하이라이트로 표시 */
   highlight?: Note
   /** 계이름 라벨 표시 여부 (기본 true) */
   showLabels?: boolean
+  /** 정답/오답 플래시 대상. 표시 시간(150ms) 관리는 호출부 책임 */
+  flash?: KeyFlash
   onPress: (note: Note) => void
 }
 
-export function Keyboard({ highlight, showLabels = true, onPress }: KeyboardProps) {
+export function Keyboard({ highlight, showLabels = true, flash, onPress }: KeyboardProps) {
   return (
     <div className="keyboard">
       {NOTES.map((note) => (
@@ -18,6 +27,7 @@ export function Keyboard({ highlight, showLabels = true, onPress }: KeyboardProp
           className="key"
           aria-label={SOLFEGE[note]}
           data-highlight={note === highlight ? 'true' : undefined}
+          data-flash={flash?.note === note ? flash.verdict : undefined}
           // 소리 지연을 줄이려면 click(=pointerup 이후)이 아니라 pointerdown 이어야 한다.
           // 우클릭·휠클릭은 컨텍스트 메뉴만 띄우고 발음시키지 않는다.
           onPointerDown={(e) => {

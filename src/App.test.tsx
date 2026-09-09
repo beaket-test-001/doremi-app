@@ -36,6 +36,27 @@ describe('App 셸', () => {
     expect(screen.getAllByRole('tabpanel')).toHaveLength(1)
   })
 
+  it('레슨 탭에서 레슨 목록을 보여준다', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    expect(screen.getAllByRole('listitem')).toHaveLength(5)
+  })
+
+  it('레슨을 열면 탭바 없이 전체 화면으로 전환된다', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    expect(screen.getByText(/레슨 1/)).toBeInTheDocument()
+    expect(screen.queryByRole('tablist')).toBeNull()
+  })
+
+  it('첫 방문에는 레슨 1만 열 수 있다', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    expect(screen.getByRole('button', { name: /1\. / })).toHaveAttribute('data-state', 'open')
+    expect(screen.getByRole('button', { name: /2\. / })).toHaveAttribute('data-state', 'locked')
+  })
+
   it('가로 회전 안내를 렌더링한다', () => {
     render(<App />)
     expect(screen.getByRole('alert')).toHaveTextContent('세로 화면으로 돌려주세요')
