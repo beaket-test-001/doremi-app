@@ -90,3 +90,69 @@ body {
     font-size: 17px;
   }
 }
+
+/* ── 건반 ─────────────────────────────────────────────
+   흰건반 7개(도~시)만. 320px 폭에서 한 건반 = 약 40px 폭이지만
+   높이 200px 로 터치 타깃 44px 요건을 충족한다. */
+.keyboard {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 200px;
+  user-select: none;
+}
+
+.key {
+  flex: 1;
+  min-width: 0; /* 320px 에서 7개가 잘리지 않게 축소를 허용 */
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12px;
+  border: 0;
+  border-radius: 0 0 8px 8px;
+  background: #f7f7fa;
+  color: #3a3a48;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  /* 플래시는 150ms 만 보여야 하므로 전환도 그 안에 끝낸다 */
+  transition: background 120ms ease-out;
+}
+
+.key:active {
+  background: #dcdce4;
+}
+
+/* 눌러야 할 건반 = 파란 하이라이트 */
+.key[data-highlight='true'] {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* 정답 초록 / 오답 빨간 플래시 (표시 시간 150ms 는 호출부가 관리) */
+.key[data-flash='correct'] {
+  background: #34c759;
+  color: #fff;
+}
+
+.key[data-flash='wrong'] {
+  background: #ff453a;
+  color: #fff;
+}
+
+/* ── 자유 연습 ───────────────────────────────────── */
+.freeplay {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--muted);
+  font-size: 15px;
+}
