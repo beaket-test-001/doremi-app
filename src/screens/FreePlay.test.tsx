@@ -13,7 +13,9 @@ function fakeEngine(): AudioEngine {
 }
 
 function press(name: string) {
-  screen.getByRole('button', { name }).dispatchEvent(new Event('pointerdown', { bubbles: true }))
+  screen
+    .getByRole('button', { name })
+    .dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }))
 }
 
 describe('자유 연습 화면', () => {
@@ -57,5 +59,16 @@ describe('자유 연습 화면', () => {
     press('레')
     press('도')
     expect(audio.play).toHaveBeenCalledTimes(3)
+  })
+
+  it('unlock이 실패해도 화면 조작은 계속 가능하다', async () => {
+    const audio = fakeEngine()
+    audio.unlock = vi.fn(async () => {
+      throw new Error('NotAllowedError')
+    })
+    render(<FreePlay audio={audio} />)
+    expect(() => press('도')).not.toThrow()
+    await userEvent.click(screen.getByRole('switch', { name: /계이름/ }))
+    expect(screen.getByRole('switch', { name: /계이름/ })).not.toBeChecked()
   })
 })
