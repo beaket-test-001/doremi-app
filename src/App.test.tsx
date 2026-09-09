@@ -190,6 +190,71 @@ describe('진도 저장', () => {
     expect(JSON.parse(backend._map.get('doremi.v1.progress')!)).toEqual(afterComplete)
   })
 
+  it('완료한 레슨을 다시 하고 끝내도 진행 중인 레슨의 진도가 남는다', async () => {
+    // 재현: 레슨 1 완료 → 레슨 2를 스텝 2까지 → 레슨 1 다시 하기 완주
+    //      → 레슨 2 의 진도가 리셋되면 데이터 손실이다
+    const backend = memoryBackend({
+      'doremi.v1.progress': { completedLessons: [1], currentLesson: 2, currentStep: 2 },
+    })
+    mount({ storage: createStorage(backend) })
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    await userEvent.click(screen.getByRole('button', { name: '다음' }))
+    for (const note of LESSON1_ANSWERS) pressKey(note)
+    await userEvent.click(screen.getByRole('button', { name: '홈으로' }))
+
+    expect(JSON.parse(backend._map.get('doremi.v1.progress')!)).toEqual({
+      completedLessons: [1],
+      currentLesson: 2,
+      currentStep: 2,
+    })
+  })
+
+  it('저장된 currentStep 이 다른 레슨 것이면 무시하고 처음부터 시작한다', async () => {
+    // currentLesson/currentStep 은 한 쌍이다. 어긋난 데이터로 다른 레슨의
+    // 스텝부터 시작하면 안 된다
+    const backend = memoryBackend({
+      'doremi.v1.progress': { completedLessons: [], currentLesson: 3, currentStep: 2 },
+    })
+    mount({ storage: createStorage(backend) })
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    await userEvent.click(screen.getByRole('button', { name: /1\. / }))
+    expect(screen.getByText(/환영해요/)).toBeInTheDocument()
+  })
+
+  it('저장 불가 배너는 모든 탭에서 보인다', async () => {
+    const broken = createStorage({
+      getItem: () => {
+        throw new Error('SecurityError')
+      },
+      setItem: () => {
+        throw new Error('SecurityError')
+      },
+      removeItem: () => {
+        throw new Error('SecurityError')
+      },
+    })
+    mount({ storage: broken })
+    const hasBanner = () =>
+      screen.queryByText('이 브라우저에서는 진도가 저장되지 않아요') !== null
+    expect(hasBanner()).toBe(true)
+    await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
+    expect(hasBanner()).toBe(true)
+    await userEvent.click(screen.getByRole('tab', { name: /연습/ }))
+    expect(hasBanner()).toBe(true)
+  })
+
+  it('이미 오늘 연습함으로 기록된 뒤에는 자유 연습이 저장소에 쓰지 않는다', async () => {
+    const backend = memoryBackend({ 'doremi.v1.practice': { dates: [todayStr()] } })
+    const storage = createStorage(backend)
+    const spy = vi.spyOn(backend, 'setItem')
+    mount({ storage })
+    await userEvent.click(screen.getByRole('tab', { name: /연습/ }))
+    spy.mockClear()
+    for (let i = 0; i < 5; i++) pressKey('도')
+    expect(spy).not.toHaveBeenCalled()
+  })
+
   it('저장 불가 브라우저에서는 배너가 뜨고 앱은 계속 쓸 수 있다', async () => {
     const broken: Storage = createStorage({
       getItem: () => {
@@ -203,12 +268,35 @@ describe('진도 저장', () => {
       },
     })
     mount({ storage: broken })
-    expect(
-      screen.getAllByRole('alert').some((el) => el.textContent?.includes('저장되지 않아요')),
-    ).toBe(true)
+    expect(screen.getByText('이 브라우저에서는 진도가 저장되지 않아요')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: /레슨/ }))
     expect(screen.getAllByRole('listitem')).toHaveLength(5)
+  })
+})
+
+describe('홈 CTA 라벨', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.stubGlobal('confirm', vi.fn(() => true))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  it('레슨 1을 중간까지 했으면 "시작하기" 가 아니라 "이어하기" 다', () => {
+    const backend = memoryBackend({
+      'doremi.v1.progress': { completedLessons: [], currentLesson: 1, currentStep: 3 },
+    })
+    mount({ storage: createStorage(backend) })
+    expect(screen.getByRole('button', { name: '레슨 1 이어하기' })).toBeInTheDocument()
+  })
+
+  it('아무것도 하지 않은 첫 방문에는 "시작하기" 다', () => {
+    mount()
+    expect(screen.getByRole('button', { name: '레슨 1 시작하기' })).toBeInTheDocument()
   })
 })
 

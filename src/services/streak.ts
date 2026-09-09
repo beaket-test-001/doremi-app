@@ -33,7 +33,10 @@ export function streak(dates: string[], today: string): number {
   const set = new Set(dates)
   let day = set.has(today) ? today : yesterdayOf(today)
   let count = 0
-  while (set.has(day)) {
+  // 서로 다른 날짜 수를 넘을 수 없다. 이 상한이 없으면 yesterdayOf 가 전진하지
+  // 못하는 입력에서 영구 루프가 된다 — 예: 형식이 깨진 날짜, 또는 Pacific/Apia 처럼
+  // 달력에 존재하지 않는 날이 있는 지역
+  while (set.has(day) && count < set.size) {
     count += 1
     day = yesterdayOf(day)
   }

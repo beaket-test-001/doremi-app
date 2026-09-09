@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_PRACTICE_DATES, createStorage } from './storage'
 
 function memoryBackend() {
@@ -165,5 +165,53 @@ describe('저장소 — 손상된 데이터', () => {
       JSON.stringify({ dates: ['2026-09-09', 42, null, '엉망', '2026-09-08'] }),
     )
     expect(createStorage(backend).loadPractice().dates).toEqual(['2026-09-09', '2026-09-08'])
+  })
+})
+
+describe('저장소 — 쓰기가 도중에 실패하는 경우', () => {
+  function quotaBackend(failAfter: number) {
+    const map = new Map<string, string>()
+    let writes = 0
+    return {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        writes += 1
+        if (writes > failAfter) throw new DOMException('QuotaExceededError')
+        map.set(k, v)
+      },
+      removeItem: (k: string) => void map.delete(k),
+    }
+  }
+
+  it('프로브는 통과했지만 이후 쓰기가 실패하면 available 이 내려간다', () => {
+    // 프로브 쓰기 1회는 성공시키고 그다음부터 실패
+    const s = createStorage(quotaBackend(1))
+    expect(s.available).toBe(true)
+    s.saveProgress({ completedLessons: [1], currentLesson: 2, currentStep: 0 })
+    expect(s.available).toBe(false)
+  })
+
+  it('쓰기 실패를 한 번만 통지한다', () => {
+    const onWriteFailure = vi.fn()
+    const s = createStorage(quotaBackend(1), { onWriteFailure })
+    s.saveProgress({ completedLessons: [], currentLesson: 1, currentStep: 0 })
+    s.saveProgress({ completedLessons: [], currentLesson: 1, currentStep: 1 })
+    expect(onWriteFailure).toHaveBeenCalledOnce()
+  })
+
+  it('정렬되지 않은 날짜 배열에서도 최신 날짜를 버리지 않는다', () => {
+    const backend = memoryBackend()
+    const old = Array.from({ length: MAX_PRACTICE_DATES }, (_, i) => {
+      const d = new Date(2024, 0, 1 + i)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+    // 일부러 뒤섞어 저장한다 (기기 시계를 되돌려 연습한 상황)
+    backend.setItem('doremi.v1.practice', JSON.stringify({ dates: [...old].reverse() }))
+
+    const s = createStorage(backend)
+    s.markPracticed('2026-09-09')
+    const dates = s.loadPractice().dates
+    expect(dates).toHaveLength(MAX_PRACTICE_DATES)
+    expect(dates).toContain('2026-09-09')
   })
 })

@@ -28,7 +28,11 @@ export interface StorageBackend {
 }
 
 export interface Storage {
-  /** false 면 상단 배너로 "진도가 저장되지 않아요" 를 알려야 한다 */
+  /**
+   * false 면 상단 배너로 "진도가 저장되지 않아요" 를 알려야 한다.
+   * 프로브 통과 후에도 용량이 차면 쓰기가 실패할 수 있으므로, 실패 시 false 로
+   * 내려가고 onWriteFailure 가 호출된다.
+   */
   available: boolean
   loadProgress(): Progress
   saveProgress(progress: Progress): void
@@ -77,7 +81,15 @@ function parsePractice(raw: string | null): PracticeLog {
   }
 }
 
-export function createStorage(backend: StorageBackend | undefined): Storage {
+export interface StorageOptions {
+  /** 쓰기가 실패해 저장이 불가능해진 시점에 호출 — 배너를 띄우기 위한 통지 */
+  onWriteFailure?: () => void
+}
+
+export function createStorage(
+  backend: StorageBackend | undefined,
+  options: StorageOptions = {},
+): Storage {
   // 시크릿 모드 등에서는 접근 자체가 던지므로 프로브로 확인한다
   let available = false
   if (backend) {
@@ -104,7 +116,12 @@ export function createStorage(backend: StorageBackend | undefined): Storage {
     try {
       backend.setItem(key, JSON.stringify(value))
     } catch {
-      // 저장 실패는 무시하고 앞으로 진행한다 (기록만 비활성)
+      // 저장 실패는 앱을 멈추지 않지만(기록만 비활성), 조용히 진도를 잃게 두면
+      // 사용자가 알 방법이 없다. available 을 내리고 배너를 띄우도록 통지한다.
+      if (api.available) {
+        api.available = false
+        options.onWriteFailure?.()
+      }
     }
   }
 
@@ -112,7 +129,7 @@ export function createStorage(backend: StorageBackend | undefined): Storage {
     return parsePractice(read(PRACTICE_KEY))
   }
 
-  return {
+  const api: Storage = {
     available,
 
     loadProgress: () => parseProgress(read(PROGRESS_KEY)),
@@ -124,8 +141,10 @@ export function createStorage(backend: StorageBackend | undefined): Storage {
     markPracticed(date) {
       const log = loadPractice()
       if (log.dates.includes(date)) return false
-      // 오래된 날짜부터 버린다
-      const dates = [...log.dates, date].slice(-MAX_PRACTICE_DATES)
+      // 상한을 넘으면 오래된 날짜부터 버린다. 기기 시계를 되돌려 연습한 경우
+      // 배열이 정렬돼 있지 않을 수 있으므로 자르기 전에 정렬한다 —
+      // 정렬하지 않으면 최신 날짜가 버려질 수 있다 (YYYY-MM-DD 는 사전순 = 시간순)
+      const dates = [...log.dates, date].sort().slice(-MAX_PRACTICE_DATES)
       write(PRACTICE_KEY, { ...log, dates })
       return true
     },
@@ -138,4 +157,6 @@ export function createStorage(backend: StorageBackend | undefined): Storage {
       return count
     },
   }
+
+  return api
 }

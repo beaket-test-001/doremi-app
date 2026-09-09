@@ -88,3 +88,13 @@ describe('스트릭 계산', () => {
     expect(streak(['2026-09-20', '2026-09-09'], today)).toBe(1)
   })
 })
+
+describe('스트릭 — 잘못된 입력', () => {
+  it('형식이 깨진 날짜에도 멈춘다 (무한 루프 방지)', () => {
+    expect(streak(['NaN-NaN-NaN'], 'NaN-NaN-NaN')).toBe(1)
+  })
+
+  it('날짜 수보다 큰 값을 반환하지 않는다', () => {
+    expect(streak(['2026-09-09'], '2026-09-09')).toBeLessThanOrEqual(1)
+  })
+})

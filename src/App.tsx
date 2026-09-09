@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { completeLesson, nextIncompleteLesson, stepFor } from './core/progress'
 import { LESSONS } from './data/lessons'
 import { FreePlay } from './screens/FreePlay'
 import { Home } from './screens/Home'
@@ -30,8 +31,10 @@ export interface AppProps {
 }
 
 export function App({ storage, analytics, audio }: AppProps = {}) {
+  // 쓰기가 도중에 실패하면(용량 초과 등) 배너를 띄우기 위해 리렌더가 필요하다
+  const [writeFailed, setWriteFailed] = useState(false)
   const store = useMemo(
-    () => storage ?? createStorage(safeLocalStorage()),
+    () => storage ?? createStorage(safeLocalStorage(), { onWriteFailure: () => setWriteFailed(true) }),
     [storage],
   )
   const track = useMemo(() => analytics ?? createAnalytics(), [analytics])
@@ -46,6 +49,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
 
   const today = todayStr()
   const streakDays = streak(practiceDates, today)
+  const canSave = store.available && !writeFailed
 
   // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData"
   useEffect(() => {
@@ -56,15 +60,20 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
     track.track('app_open')
   }, [track])
 
-  /** 오늘을 연습일로 기록. 새로 기록됐으면 streak_updated 를 1회 보낸다 */
+  /**
+   * 오늘을 연습일로 기록. 새로 기록됐으면 streak_updated 를 1회 보낸다.
+   * 날짜는 렌더 시점 값이 아니라 호출 시점에 다시 구한다 — 앱을 열어 둔 채
+   * 자정을 넘기면 렌더가 없어 stale 한 어제 날짜로 기록될 수 있다.
+   */
   const markPracticedToday = useCallback(() => {
-    if (!store.markPracticed(today)) return
+    const now = todayStr()
+    if (!store.markPracticed(now)) return
     const dates = store.loadPractice().dates
     setPracticeDates(dates)
-    track.track('streak_updated', { streak_days: streak(dates, today) })
-  }, [store, today, track])
+    track.track('streak_updated', { streak_days: streak(dates, now) })
+  }, [store, track])
 
-  const currentLesson = LESSONS.find((l) => !progress.completedLessons.includes(l.id))?.id ?? 1
+  const currentLesson = nextIncompleteLesson(progress.completedLessons)
   const openLesson = LESSONS.find((l) => l.id === openLessonId)
   // 완료 레슨 '다시 하기'·'전체 복습하기' 는 진도를 저장하지 않는다
   const isReplay = openLesson ? progress.completedLessons.includes(openLesson.id) : false
@@ -86,10 +95,10 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
         <LessonPlay
           key={openLesson.id}
           lesson={openLesson}
-          startStep={isReplay ? 0 : progress.currentStep}
+          startStep={isReplay ? 0 : stepFor(progress, openLesson.id)}
           hasNextLesson={LESSONS.some((l) => l.id === openLesson.id + 1)}
           streakDays={streakDays}
-          canSave={store.available}
+          canSave={canSave}
           audio={engine}
           onClose={() => {
             setOpenLessonId(null)
@@ -109,13 +118,9 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
               lesson_id: lessonId,
               duration: Math.round((performance.now() - lessonStartedAt.current) / 1000),
             })
-            const completedLessons = progress.completedLessons.includes(lessonId)
-              ? progress.completedLessons
-              : [...progress.completedLessons, lessonId]
-            const nextLesson =
-              LESSONS.find((l) => !completedLessons.includes(l.id))?.id ?? LESSONS[0].id
-            // currentLesson/currentStep 은 미완료 레슨 전용 — 완료 시 다음 레슨으로 리셋
-            saveProgress({ completedLessons, currentLesson: nextLesson, currentStep: 0 })
+            // completeLesson 이 복습(이미 완료한 레슨)일 때 진도를 그대로 반환한다
+            const next = completeLesson(progress, lessonId)
+            if (next !== progress) saveProgress(next)
           }}
           onNextLesson={() => {
             const next = LESSONS.find((l) => l.id === openLesson.id + 1)
@@ -134,6 +139,13 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
         세로 화면으로 돌려주세요
       </div>
 
+      {/* 저장 불가 안내는 전 화면 공통이므로 탭 껍데기에 둔다 */}
+      {canSave ? null : (
+        <p className="banner" role="status">
+          이 브라우저에서는 진도가 저장되지 않아요
+        </p>
+      )}
+
       {TAB_IDS.map((id) => (
         <main
           key={id}
@@ -149,7 +161,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
               completed={progress.completedLessons}
               practiceDates={practiceDates}
               today={today}
-              canSave={store.available}
+              hasProgress={progress.currentStep > 0}
               onContinue={openLessonById}
             />
           ) : null}
@@ -157,7 +169,7 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
             <LessonList
               completed={progress.completedLessons}
               currentLesson={currentLesson}
-              currentStep={progress.currentLesson === currentLesson ? progress.currentStep : 0}
+              currentStep={stepFor(progress, currentLesson)}
               onOpen={openLessonById}
             />
           ) : null}
@@ -167,7 +179,6 @@ export function App({ storage, analytics, audio }: AppProps = {}) {
               audio={engine}
               store={store}
               track={track}
-              today={today}
               onPracticed={markPracticedToday}
             />
           ) : null}
@@ -200,14 +211,12 @@ function PracticeTab({
   audio,
   store,
   track,
-  today,
   onPracticed,
 }: {
   active: boolean
   audio: AudioEngine
   store: Storage
   track: Analytics
-  today: string
   onPracticed: () => void
 }) {
   const enteredAt = useRef(0)
@@ -228,7 +237,11 @@ function PracticeTab({
     <FreePlay
       audio={audio}
       onNotePlayed={() => {
-        if (store.addFreeNotes(today, 1) >= FREE_PLAY_NOTES_FOR_PRACTICE) onPracticed()
+        // 이미 오늘 연습함으로 기록됐으면 더 셀 필요가 없다 (매 터치 쓰기 방지).
+        // 날짜는 호출 시점에 구한다 — 자정을 넘겨도 올바른 날짜에 쌓인다
+        const now = todayStr()
+        if (store.loadPractice().dates.includes(now)) return
+        if (store.addFreeNotes(now, 1) >= FREE_PLAY_NOTES_FOR_PRACTICE) onPracticed()
       }}
     />
   )
