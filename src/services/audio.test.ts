@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { NOTE_FREQ } from '../types'
 import { createAudioEngine } from './audio'
 
@@ -76,6 +76,24 @@ describe('오디오 엔진', () => {
 
   beforeEach(() => {
     mock = mockAudioContext()
+    // jsdom 은 HTMLMediaElement.play 를 구현하지 않아 콘솔 노이즈가 난다.
+    // 무음 재생 동작 자체는 playSilentAudio 를 명시로 주입하는 테스트에서 검증한다.
+    vi.stubGlobal(
+      'Audio',
+      class {
+        volume = 0
+        canPlayType() {
+          return ''
+        }
+        play() {
+          return Promise.resolve()
+        }
+      },
+    )
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
   })
 
   describe('컨텍스트 수명주기', () => {
@@ -120,7 +138,7 @@ describe('오디오 엔진', () => {
       expect(mock.ctx.resume).toHaveBeenCalled()
     })
 
-    it('unlock이 실패하면 다음 제스처에서 다시 시도할 수 있다 (프로미스 오염 방지)', async () => {
+    it('컨텍스트 생성이 실패하면 실패를 고정하지 않고 다음 제스처에서 다시 시도한다', async () => {
       let attempt = 0
       const engine = createAudioEngine({
         contextFactory: () => {
@@ -129,9 +147,11 @@ describe('오디오 엔진', () => {
           return mock.ctx as unknown as AudioContext
         },
       })
-      await expect(engine.unlock()).rejects.toThrow('AudioContext 생성 실패')
-      // 실패가 영구 고정되면 앱이 세션 내내 무음이 된다
+      // 오디오 실패는 사용자에게 표시하지 않으므로 reject 하지 않는다
       await expect(engine.unlock()).resolves.toBeUndefined()
+      expect(mock.ctx.resume).not.toHaveBeenCalled()
+      // 실패가 영구 고정되면 앱이 세션 내내 무음이 된다
+      await engine.unlock()
       expect(mock.ctx.resume).toHaveBeenCalled()
     })
   })
@@ -207,6 +227,54 @@ describe('오디오 엔진', () => {
     })
   })
 
+  describe('오디오를 쓸 수 없는 환경', () => {
+    it('AudioContext가 없는 브라우저에서도 예외 없이 무음 동작한다', async () => {
+      const engine = createAudioEngine({
+        contextFactory: () => {
+          throw new ReferenceError('AudioContext is not defined')
+        },
+      })
+      await expect(engine.unlock()).resolves.toBeUndefined()
+      await expect(engine.loadSamples()).resolves.toBeUndefined()
+      expect(() => engine.play('C4')).not.toThrow()
+    })
+
+    it('마스터 게인 생성이 실패하면 발음하지 않고, 다음 제스처에서 복구를 시도한다', async () => {
+      let attempt = 0
+      const engine = createAudioEngine({
+        contextFactory: () => {
+          attempt += 1
+          if (attempt === 1) {
+            return {
+              ...mock.ctx,
+              createGain: () => {
+                throw new Error('createGain 실패')
+              },
+            } as unknown as AudioContext
+          }
+          return mock.ctx as unknown as AudioContext
+        },
+      })
+      await expect(engine.unlock()).resolves.toBeUndefined()
+      // 반쪽 상태(ctx는 있고 master는 없음)로 남아 play가 터지면 안 된다
+      expect(() => engine.play('C4')).not.toThrow()
+      expect(mock.started).toHaveLength(0)
+
+      await engine.unlock()
+      engine.play('C4')
+      expect(mock.started).toHaveLength(1)
+    })
+  })
+
+  describe('제스처 타이밍', () => {
+    it('resume을 제스처와 같은 태스크에서 동기 호출한다 (iOS 신뢰성)', () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      // await 하지 않는다 — 이 시점에 이미 resume이 불려 있어야 한다
+      void engine.unlock()
+      expect(mock.ctx.resume).toHaveBeenCalled()
+    })
+  })
+
   describe('샘플 로드', () => {
     it('unlock 전에 호출해도 샘플을 로드한다 (앱 시작 시 프리로드)', async () => {
       const fetchImpl = okFetch()
@@ -214,6 +282,21 @@ describe('오디오 엔진', () => {
       await engine.loadSamples()
       expect(fetchImpl).toHaveBeenCalledTimes(7)
       expect(mock.ctx.decodeAudioData).toHaveBeenCalledTimes(7)
+    })
+
+    it('여러 번 호출해도 한 번만 로드한다 (StrictMode 이중 마운트)', async () => {
+      const fetchImpl = okFetch()
+      const engine = createAudioEngine({ contextFactory: factory, fetchImpl })
+      await Promise.all([engine.loadSamples(), engine.loadSamples()])
+      await engine.loadSamples()
+      expect(fetchImpl).toHaveBeenCalledTimes(7)
+    })
+
+    it('음원이 없어도 음당 요청은 1회를 넘지 않는다', async () => {
+      const fetchImpl = vi.fn(async () => ({ ok: false })) as unknown as typeof fetch
+      const engine = createAudioEngine({ contextFactory: factory, fetchImpl })
+      await engine.loadSamples()
+      expect(fetchImpl).toHaveBeenCalledTimes(7)
     })
 
     it('로드에 성공하면 합성음 대신 버퍼를 재생한다', async () => {
@@ -236,20 +319,38 @@ describe('오디오 엔진', () => {
       expect(src.disconnect).toHaveBeenCalled()
     })
 
-    it('mp3가 없으면 ogg를 시도한다', async () => {
+    it('mp3를 재생할 수 있는 브라우저에는 mp3만 요청한다', async () => {
       const urls: string[] = []
       const fetchImpl = vi.fn(async (url: string) => {
         urls.push(url)
-        return url.endsWith('.ogg')
-          ? { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }
-          : { ok: false }
+        return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }
       }) as unknown as typeof fetch
 
-      const engine = createAudioEngine({ contextFactory: factory, fetchImpl })
+      const engine = createAudioEngine({
+        contextFactory: factory,
+        fetchImpl,
+        canPlayType: (mime) => (mime === 'audio/mpeg' ? 'probably' : ''),
+      })
       await engine.loadSamples()
       expect(urls.filter((u) => u.endsWith('.mp3'))).toHaveLength(7)
+      expect(urls.filter((u) => u.endsWith('.ogg'))).toHaveLength(0)
+    })
+
+    it('mp3를 못 읽는 브라우저에는 ogg를 요청한다', async () => {
+      const urls: string[] = []
+      const fetchImpl = vi.fn(async (url: string) => {
+        urls.push(url)
+        return { ok: true, arrayBuffer: async () => new ArrayBuffer(8) }
+      }) as unknown as typeof fetch
+
+      const engine = createAudioEngine({
+        contextFactory: factory,
+        fetchImpl,
+        canPlayType: (mime) => (mime === 'audio/ogg' ? 'probably' : ''),
+      })
+      await engine.loadSamples()
       expect(urls.filter((u) => u.endsWith('.ogg'))).toHaveLength(7)
-      expect(mock.ctx.decodeAudioData).toHaveBeenCalledTimes(7)
+      expect(urls.filter((u) => u.endsWith('.mp3'))).toHaveLength(0)
     })
 
     it('모든 포맷이 실패하면 조용히 합성음 폴백을 유지한다', async () => {

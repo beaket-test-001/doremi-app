@@ -20,7 +20,7 @@ export function App() {
   // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData".
   // 디코드는 suspended 컨텍스트에서도 되므로 unlock 을 기다릴 필요가 없다.
   useEffect(() => {
-    void audio.loadSamples()
+    audio.loadSamples().catch(() => {})
   }, [audio])
 
   return (
