@@ -18,7 +18,9 @@
 | 테스트 | Vitest + Testing Library |
 
 > **언어 결정:** 원래 계획은 Dart · Flutter Web이었으나, ADR-001의 폴백 조건 ②(Dart 작성 가능자 없음)에
-> 해당하여 Vite + React + TS로 폴백했습니다. 저장 스키마 · GA4 이벤트 · 화면 사양은 변경 없습니다.
+> 해당하여 Vite + React + TS로 폴백했습니다. GA4 이벤트 · 화면 사양은 변경 없습니다.
+> 저장 스키마는 `doremi.v1.practice` 에 선택 필드 `freeNotes: {date, count}` 1개만 추가했습니다
+> (「10음은 그날 누적, 세션 무관」을 기존 스키마로 표현할 수 없어서 — 구현 가이드 참조).
 
 ## 개발
 
@@ -36,15 +38,20 @@ npm run build    # 프로덕션 빌드 (타입 체크 포함)
 
 ```
 src/
-  main.tsx          진입점                        (← lib/main.dart)
-  App.tsx           하단 탭 + 화면 전환
-  screens/          home · lesson_list · lesson_play · free_play   (예정)
-  widgets/          keyboard · streak_card · practice_calendar     (예정)
-  services/         audio · storage · streak · analytics           (예정)
-  data/lessons.ts   레슨 5개 데이터                                (예정)
+  main.tsx          진입점
+  App.tsx           Shell(전 화면 공통 안내) + 하단 탭 + 화면 전환
+  types.ts          Note · SOLFEGE · NOTE_FREQ · Step · Lesson · Progress
+  index.css         전체 스타일 (한 파일)
+  screens/          Home · LessonList · LessonPlay · FreePlay
+  widgets/          Keyboard
+  core/             lessonEngine · progress · korean   ← 화면과 분리한 순수 로직
+  services/         audio · storage · streak · analytics
+  data/lessons.ts   레슨 5개 데이터 (Notion 정의서의 복사본)
 ```
 
-`(예정)` 표시는 아직 만들지 않은 디렉터리입니다 — 해당 기능 PR에서 추가합니다.
+테스트는 대상 파일과 같은 디렉터리에 `*.test.ts(x)` 로 둡니다.
+`src/styles.test.ts` 는 컴포넌트가 내보내는 `data-*` 상태마다 CSS 규칙이 있는지 검사합니다 —
+속성만 붙고 스타일이 없어 화면에 아무 변화가 없던 결함이 실제로 발생했기 때문입니다.
 
 ## 피아노 음원
 
@@ -55,4 +62,6 @@ exponential 감쇠)으로 동작합니다. 사양상 폴백은 릴리스 블로�
 샘플을 우선 사용하고, 없거나 로드에 실패한 음만 합성음으로 떨어집니다. 코드 변경은 필요 없습니다.
 
 - **CC0 / 퍼블릭 도메인 라이선스만** 사용할 것 (예: University of Iowa MIS, freesound CC0)
-- 합계 300KB 이하 · mp3 + ogg 권장 (현재 로더는 mp3 경로만 조회)
+- 합계 300KB 이하 · **mp3 와 ogg 를 둘 다 배포**하세요. 로더는 `canPlayType` 으로
+  브라우저가 읽을 수 있는 포맷을 재생 전에 1회 결정해 음당 요청 1회로 끝냅니다
+  (404 를 보고 폴백하지 않습니다 — 요청이 두 배가 되고, 한 음이 없을 때 나머지까지 버립니다)
