@@ -43,10 +43,14 @@ describe('레슨 플레이', () => {
 
   describe('헤더', () => {
     it('레슨 제목과 스텝 진행도를 보여준다', () => {
-      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       expect(screen.getByText(/레슨 3/)).toBeInTheDocument()
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '3')
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
+      const bar = screen.getByRole('progressbar')
+      // valuenow = 완료한 스텝 수. 첫 스텝에서는 0 이어야 SR 이 0% 로 읽는다
+      expect(bar).toHaveAttribute('aria-valuemin', '0')
+      expect(bar).toHaveAttribute('aria-valuemax', '3')
+      expect(bar).toHaveAttribute('aria-valuenow', '0')
+      expect(bar).toHaveAttribute('aria-valuetext', '3개 중 1번째 스텝')
     })
 
     it('✕ 는 확인을 받은 뒤 닫는다', async () => {
@@ -56,6 +60,7 @@ describe('레슨 플레이', () => {
           lesson={L}
           audio={fakeEngine()}
           onClose={onClose}
+          onHome={() => {}}
           onComplete={() => {}}
           onNextLesson={() => {}}
         />,
@@ -75,6 +80,7 @@ describe('레슨 플레이', () => {
           lesson={L}
           audio={fakeEngine()}
           onClose={onClose}
+          onHome={() => {}}
           onComplete={() => {}}
           onNextLesson={() => {}}
         />,
@@ -86,23 +92,23 @@ describe('레슨 플레이', () => {
 
   describe('intro 스텝', () => {
     it('문구와 [다음] 버튼만 보여준다 (건반 없음)', () => {
-      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       expect(screen.getByText('안내 문구예요')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: '다음' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: '도' })).toBeNull()
     })
 
     it('[다음] 을 누르면 다음 스텝으로 넘어간다', async () => {
-      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       await userEvent.click(screen.getByRole('button', { name: '다음' }))
       expect(screen.getByText(/미.*찾아 눌러보세요/)).toBeInTheDocument()
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1')
     })
   })
 
   describe('find_key 스텝', () => {
     async function goToFindKey() {
-      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       await userEvent.click(screen.getByRole('button', { name: '다음' }))
     }
 
@@ -153,7 +159,7 @@ describe('레슨 플레이', () => {
 
     it('오답도 누른 건반의 소리를 낸다', async () => {
       const audio = fakeEngine()
-      render(<LessonPlay lesson={L} audio={audio} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={audio} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       await userEvent.click(screen.getByRole('button', { name: '다음' }))
       press('도')
       expect(audio.play).toHaveBeenCalledWith('C4')
@@ -171,7 +177,7 @@ describe('레슨 플레이', () => {
 
   describe('play_sequence 스텝', () => {
     async function goToSequence() {
-      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
+      render(<LessonPlay lesson={L} audio={fakeEngine()} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       await userEvent.click(screen.getByRole('button', { name: '다음' }))
       press('미')
       act(() => void vi.advanceTimersByTime(FLASH_MS))
@@ -216,6 +222,7 @@ describe('레슨 플레이', () => {
           lesson={lesson}
           audio={fakeEngine()}
           onClose={() => {}}
+          onHome={() => {}}
           onComplete={onComplete}
           onNextLesson={() => {}}
         />,
@@ -247,15 +254,149 @@ describe('레슨 플레이', () => {
       expect(screen.getByRole('button', { name: '홈으로' })).toBeInTheDocument()
     })
 
-    it('레슨 5는 [홈으로] 만 보여준다', async () => {
-      const lesson5: Lesson = { ...L, id: LESSONS.at(-1)!.id }
-      await finish(lesson5)
+    it('마지막 레슨(다음 레슨 없음)은 [홈으로] 만 보여준다', async () => {
+      // 레슨 5 여부는 App 이 판단해 hasNextLesson 으로 알려 준다
+      expect(LESSONS.at(-1)!.id).toBe(5)
+    })
+  })
+
+  describe('접근성', () => {
+    it('레슨 제목이 제목 요소이고 열릴 때 포커스를 받는다', () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      const heading = screen.getByRole('heading', { name: /레슨 3/ })
+      expect(heading).toBeInTheDocument()
+      expect(heading).toHaveFocus()
+    })
+
+    it('정답·오답을 색과 진동 외에 텍스트로도 알린다 (WCAG 1.4.1)', async () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={1}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      press('도')
+      expect(screen.getByRole('status')).toHaveTextContent(/다시/)
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      press('미')
+      expect(screen.getByRole('status')).toHaveTextContent(/정답/)
+    })
+  })
+
+  describe('완료 화면 — 홈 이동', () => {
+    it('[홈으로] 는 목록이 아니라 홈으로 보낸다', async () => {
+      const onHome = vi.fn()
+      const onClose = vi.fn()
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={2}
+          audio={fakeEngine()}
+          onClose={onClose}
+          onHome={onHome}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      press('도')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      press('레')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      await userEvent.click(screen.getByRole('button', { name: '홈으로' }))
+      expect(onHome).toHaveBeenCalled()
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('hasNextLesson 이 false 면 [다음 레슨] 을 숨긴다', async () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={2}
+          hasNextLesson={false}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      press('도')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      press('레')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
       expect(screen.queryByRole('button', { name: '다음 레슨' })).toBeNull()
       expect(screen.getByRole('button', { name: '홈으로' })).toBeInTheDocument()
     })
   })
 
   describe('이어하기', () => {
+    it('스텝이 바뀔 때마다 onStepChange 로 알린다', async () => {
+      const onStepChange = vi.fn()
+      render(
+        <LessonPlay
+          lesson={L}
+          audio={fakeEngine()}
+          onStepChange={onStepChange}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      await userEvent.click(screen.getByRole('button', { name: '다음' }))
+      expect(onStepChange).toHaveBeenCalledWith(1)
+      press('미')
+      act(() => void vi.advanceTimersByTime(FLASH_MS))
+      expect(onStepChange).toHaveBeenCalledWith(2)
+    })
+
+    it('startStep 이 스텝 수를 넘어도 화면이 깨지지 않는다', () => {
+      // 저장된 값이 그대로 들어오므로 방어가 필요하다
+      expect(() =>
+        render(
+          <LessonPlay
+            lesson={L}
+            startStep={99}
+            audio={fakeEngine()}
+            onClose={() => {}}
+            onHome={() => {}}
+            onComplete={() => {}}
+            onNextLesson={() => {}}
+          />,
+        ),
+      ).not.toThrow()
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+    })
+
+    it('startStep 이 음수여도 첫 스텝으로 시작한다', () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={-3}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      expect(screen.getByText('안내 문구예요')).toBeInTheDocument()
+    })
+
     it('startStep 으로 중간 스텝부터 시작한다', () => {
       render(
         <LessonPlay
@@ -263,12 +404,13 @@ describe('레슨 플레이', () => {
           startStep={2}
           audio={fakeEngine()}
           onClose={() => {}}
+          onHome={() => {}}
           onComplete={() => {}}
           onNextLesson={() => {}}
         />,
       )
       expect(screen.getByText('도레')).toBeInTheDocument()
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '3')
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
     })
   })
 })

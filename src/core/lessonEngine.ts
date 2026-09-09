@@ -43,12 +43,11 @@ export function expectedNote(lesson: Lesson, state: LessonState): Note | undefin
 
 /** 파란 하이라이트로 표시할 건반 */
 export function highlightNote(lesson: Lesson, state: LessonState): Note | undefined {
-  const step = currentStep(lesson, state)
-  // find_key 는 스스로 찾는 스텝이므로, 두 번 틀린 뒤에만 알려 준다
-  if (step.type === 'find_key')
-    return state.wrongCount >= HIGHLIGHT_AFTER_WRONG ? step.note : undefined
-  if (step.type === 'play_sequence') return step.notes[state.seqIndex]
-  return undefined
+  // find_key 는 스스로 찾는 스텝이므로, 두 번 틀린 뒤에만 알려 준다.
+  // 그 외에는 기대 음을 그대로 하이라이트한다 (분기를 expectedNote 에 위임)
+  if (currentStep(lesson, state).type === 'find_key' && state.wrongCount < HIGHLIGHT_AFTER_WRONG)
+    return undefined
+  return expectedNote(lesson, state)
 }
 
 /** intro 의 [다음] 버튼 */
@@ -91,7 +90,7 @@ export function press(lesson: Lesson, state: LessonState, note: Note): PressOutc
   return {
     verdict: 'correct',
     soundNote: note,
-    next: initialState(state.stepIndex + 1),
+    next: nextStep(state),
     stepCompleted: true,
     lessonCompleted,
   }

@@ -25,8 +25,11 @@ export function App() {
   const [tab, setTab] = useState<TabId>('home')
   const audio = useMemo(() => createAudioEngine(), [])
 
-  // 진도는 아직 메모리에만 있다 — localStorage 연동은 저장 PR에서 붙인다
+  // 진도는 아직 메모리에만 있다 — localStorage 연동은 저장 PR에서 붙인다.
+  // 저장 스키마와 같은 모양(completedLessons / currentStep)으로 들고 있어야
+  // 다음 PR 에서 localStorage 어댑터만 갈아끼울 수 있다.
   const [completed, setCompleted] = useState<number[]>([])
+  const [currentStep, setCurrentStep] = useState(0)
   const [openLessonId, setOpenLessonId] = useState<number | null>(null)
 
   // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData".
@@ -37,9 +40,12 @@ export function App() {
 
   const currentLesson = nextIncomplete(completed)
   const openLesson = LESSONS.find((l) => l.id === openLessonId)
+  const isReplay = openLesson ? completed.includes(openLesson.id) : false
 
   function handleComplete(lessonId: number) {
     setCompleted((prev) => (prev.includes(lessonId) ? prev : [...prev, lessonId]))
+    // currentLesson/currentStep 은 미완료 레슨 전용 — 완료했으면 스텝을 리셋한다
+    setCurrentStep(0)
   }
 
   // 레슨 플레이는 탭 없이 전체 화면으로 열린다 (닫기 = 레슨 목록으로)
@@ -49,10 +55,20 @@ export function App() {
         <LessonPlay
           key={openLesson.id}
           lesson={openLesson}
+          // 완료한 레슨을 다시 할 때는 처음부터 — 진도는 미완료 레슨 전용이다
+          startStep={isReplay ? 0 : currentStep}
+          hasNextLesson={LESSONS.some((l) => l.id === openLesson.id + 1)}
           audio={audio}
           onClose={() => {
             setOpenLessonId(null)
             setTab('lessons')
+          }}
+          onHome={() => {
+            setOpenLessonId(null)
+            setTab('home')
+          }}
+          onStepChange={(stepIndex) => {
+            if (!isReplay) setCurrentStep(stepIndex)
           }}
           onComplete={handleComplete}
           onNextLesson={() => {
@@ -86,6 +102,7 @@ export function App() {
             <LessonList
               completed={completed}
               currentLesson={currentLesson}
+              currentStep={currentStep}
               onOpen={setOpenLessonId}
             />
           ) : null}
