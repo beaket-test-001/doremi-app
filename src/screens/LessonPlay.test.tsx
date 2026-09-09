@@ -260,6 +260,49 @@ describe('레슨 플레이', () => {
     })
   })
 
+  describe('사양 문언 정합', () => {
+    it('받침이 있는 계이름에는 조사 "을" 을 붙인다', () => {
+      const solLesson: Lesson = {
+        id: 2,
+        title: '조사 테스트',
+        steps: [{ type: 'find_key', note: 'G4' }],
+      }
+      render(
+        <LessonPlay
+          lesson={solLesson}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      // 사양 템플릿 "○를 찾아 눌러보세요" 는 솔에서 "솔를" 이 되어 어색하다
+      expect(screen.getByText('솔을 찾아 눌러보세요')).toBeInTheDocument()
+    })
+
+    it('스텝 도트는 완료·현재·미완료 3상태로 구분하고 progressbar 값과 일치한다', () => {
+      render(
+        <LessonPlay
+          lesson={L}
+          startStep={2}
+          audio={fakeEngine()}
+          onClose={() => {}}
+          onHome={() => {}}
+          onComplete={() => {}}
+          onNextLesson={() => {}}
+        />,
+      )
+      const dots = screen.getAllByTestId('step-dot')
+      expect(dots).toHaveLength(3)
+      // 완료 2개 · 현재 1개 · 미완료 0개
+      expect(dots.filter((d) => d.dataset.state === 'done')).toHaveLength(2)
+      expect(dots.filter((d) => d.dataset.state === 'current')).toHaveLength(1)
+      // 채워진(완료) 도트 수 = aria-valuenow
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2')
+    })
+  })
+
   describe('접근성', () => {
     it('레슨 제목이 제목 요소이고 열릴 때 포커스를 받는다', () => {
       render(

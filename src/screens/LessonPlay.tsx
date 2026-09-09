@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { withObjectParticle } from '../core/korean'
 import {
   currentStep,
   highlightNote,
@@ -72,6 +73,10 @@ export function LessonPlay({
   // 언마운트 시 남은 타이머를 정리한다 (닫기 직후 setState 경고 방지)
   useEffect(() => () => clearTimeout(flashTimer.current), [])
 
+  // ponytail: 같은 건반을 150ms 안에 다시 누르면 data-flash 값이 그대로여서
+  // 플래시가 새로 깜빡이지 않고 색이 이어진다 (레슨 1의 '미,미' 같은 연타).
+  // 소리와 시퀀스 진행으로 피드백은 남으므로 허용한다. 각 입력마다 뚜렷한
+  // 재점멸이 필요해지면 오버레이 + keyframes 로 바꿀 것.
   function showFlash(next: KeyFlash) {
     clearTimeout(flashTimer.current)
     setFlash(next)
@@ -165,7 +170,13 @@ export function LessonPlay({
           aria-valuetext={`${totalSteps}개 중 ${state.stepIndex + 1}번째 스텝`}
         >
           {lesson.steps.map((_, i) => (
-            <span key={i} className={i <= state.stepIndex ? 'dot dot--on' : 'dot'} />
+            <span
+              key={i}
+              className="dot"
+              data-testid="step-dot"
+              // 채워진(done) 도트 수 = aria-valuenow(완료 스텝 수) 로 시각과 낭독을 맞춘다
+              data-state={i < state.stepIndex ? 'done' : i === state.stepIndex ? 'current' : 'todo'}
+            />
           ))}
         </span>
       </header>
@@ -185,7 +196,9 @@ export function LessonPlay({
         <>
           <div className="lesson__body">
             {step.type === 'find_key' ? (
-              <p className="lesson__prompt">{`${SOLFEGE[step.note]}를 찾아 눌러보세요`}</p>
+              <p className="lesson__prompt">
+                {`${withObjectParticle(SOLFEGE[step.note])} 찾아 눌러보세요`}
+              </p>
             ) : (
               <>
                 <p className="lesson__phrase">{step.label}</p>

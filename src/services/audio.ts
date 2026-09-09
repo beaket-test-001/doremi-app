@@ -8,6 +8,9 @@ const SYNTH_FLOOR_GAIN = 0.0001 // exponentialRamp 는 0을 받지 못한다
 // 흰건반 7개를 동시에 눌러도 합이 1을 넘지 않도록 마스터에서 눌러 준다
 const MASTER_GAIN = 0.7
 
+// resume 이 연속으로 이만큼 실패하면 재시도를 멈춘다 (성공 시 카운터 리셋)
+const MAX_UNLOCK_FAILURES = 5
+
 // 사양: "포맷: mp3 + ogg 둘 다" — 두 포맷을 다 배포하고, 브라우저가 읽을 수 있는
 // 쪽을 재생 전에 골라 요청한다. 404 를 보고 폴백하면 음마다 요청이 두 배가 된다.
 const SAMPLE_FORMATS = [
@@ -56,6 +59,8 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   let ctx: AudioContext | null = null
   let master: GainNode | null = null
   let unlockPromise: Promise<void> | null = null
+  let unlockInFlight = false
+  let consecutiveFailures = 0
   let loadPromise: Promise<void> | null = null
   const samples = new Map<Note, AudioBuffer>()
 
@@ -83,7 +88,19 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   }
 
   function unlock(): Promise<void> {
-    if (unlockPromise) return unlockPromise
+    // running 이면 이미 열려 있으니 캐시된 프로미스를 그대로 준다.
+    // iOS 는 백그라운드 전환 시 컨텍스트를 suspended · interrupted 로 만드는데,
+    // 무조건 캐시를 반환하면 복귀 후 resume 을 다시 시도하지 못해 계속 무음이 된다.
+    if (unlockPromise && ctx?.state === 'running') return unlockPromise
+
+    // 건반을 누를 때마다 unlock 이 불리므로, 아직 진행 중인 시도가 있으면 편승한다.
+    // 이 가드가 없으면 자동재생이 차단된 기기에서 연타할 때마다 무음 Audio 와
+    // resume 호출이 쌓인다.
+    if (unlockPromise && unlockInFlight) return unlockPromise
+
+    // resume 이 계속 실패하는 기기에서 무한히 재시도하지 않는다.
+    // 성공하면 카운터를 되돌리므로 백그라운드 복귀는 몇 번이든 처리된다.
+    if (consecutiveFailures >= MAX_UNLOCK_FAILURES) return Promise.resolve()
 
     const context = ensureContext()
     if (!context) return Promise.resolve() // 오디오 없이도 화면은 써야 한다
@@ -102,7 +119,20 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
       if (context.state === 'suspended') await context.resume()
     })()
 
+    unlockInFlight = true
     unlockPromise = attempt
+    void attempt.then(
+      () => {
+        unlockInFlight = false
+        // 실제로 열렸을 때만 성공으로 본다
+        if (context.state === 'running') consecutiveFailures = 0
+        else consecutiveFailures += 1
+      },
+      () => {
+        unlockInFlight = false
+        consecutiveFailures += 1
+      },
+    )
     // 실패를 프로미스에 영구 고정하면 세션 내내 복구 불가능한 무음이 된다.
     // (?? = 로 대입하면 IIFE 가 먼저 동기 실행되므로 초기화가 덮어써진다)
     attempt.catch(() => {
