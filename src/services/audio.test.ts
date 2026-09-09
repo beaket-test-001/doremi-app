@@ -177,6 +177,58 @@ describe('오디오 엔진', () => {
       expect(mock.ctx.resume).toHaveBeenCalledTimes(1)
     })
 
+    it('진행 중인 unlock 이 있으면 편승한다 (연타 시 중복 시도 방지)', async () => {
+      let silentCalls = 0
+      let release: (() => void) | undefined
+      const engine = createAudioEngine({
+        contextFactory: factory,
+        playSilentAudio: () => {
+          silentCalls += 1
+          return new Promise<void>((r) => {
+            release = r
+          })
+        },
+      })
+      // 첫 시도가 아직 끝나지 않은 상태에서 연타
+      const a = engine.unlock()
+      const b = engine.unlock()
+      const c = engine.unlock()
+      expect(silentCalls).toBe(1)
+      expect(b).toBe(a)
+      expect(c).toBe(a)
+      release!()
+      await a
+    })
+
+    it('resume 이 계속 실패하면 재시도를 멈춘다 (무한 시도 방지)', async () => {
+      let silentCalls = 0
+      const stuck = {
+        ...mock.ctx,
+        state: 'suspended' as AudioContextState,
+        resume: vi.fn(async () => {}), // running 으로 바뀌지 않는다
+      }
+      const engine = createAudioEngine({
+        contextFactory: () => stuck as unknown as AudioContext,
+        playSilentAudio: async () => {
+          silentCalls += 1
+        },
+      })
+      for (let i = 0; i < 20; i++) await engine.unlock()
+      // 상한(5회)을 넘어서는 시도를 하지 않는다
+      expect(silentCalls).toBeLessThanOrEqual(5)
+    })
+
+    it('한 번 성공하면 실패 카운터가 리셋되어 이후 복귀를 계속 처리한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      // 백그라운드 복귀를 10회 반복
+      for (let i = 0; i < 10; i++) {
+        await engine.unlock()
+        expect(mock.ctx.state).toBe('running')
+        mock.ctx.state = 'suspended'
+      }
+      expect(mock.ctx.resume).toHaveBeenCalledTimes(10)
+    })
+
     it('재resume 시 AudioContext 는 새로 만들지 않는다', async () => {
       const spy = vi.fn(factory)
       const engine = createAudioEngine({ contextFactory: spy })

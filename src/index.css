@@ -98,6 +98,8 @@ body {
    320px 기준: (320 - gap 1px×6) / 7 = 약 44.9px → 폭 요건 충족. */
 .keyboard {
   display: flex;
+  /* 배너 등 형제 요소가 생겨도 건반 높이가 줄어들지 않게 한다 */
+  flex-shrink: 0;
   gap: 1px;
   margin: 0 calc(-1 * var(--screen-pad));
   height: 200px;
