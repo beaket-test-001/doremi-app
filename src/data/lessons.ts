@@ -48,7 +48,7 @@ export const LESSONS: Lesson[] = [
     steps: [
       {
         type: 'intro',
-        text: "드디어 첫 곡이에요! '비행기'를 세 부분으로 나눠 연습한 뒤 이어서 연주해요.",
+        text: "드디어 첫 곡이에요! '비행기'를 두 부분으로 나눠 연습한 뒤 이어서 연주해요.",
       },
       {
         type: 'play_sequence',

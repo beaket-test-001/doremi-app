@@ -50,6 +50,22 @@ describe('레슨 데이터', () => {
     }
   })
 
+  it("intro 문구의 '○ 부분' 이 실제 연습 프레이즈 수와 맞는다", () => {
+    // 레슨 3 intro 가 '세 부분' 이라고 하면서 연습 프레이즈가 2개였던 오류가 있었다.
+    // '전체' 로 끝나는 마지막 시퀀스는 이어서 연주하는 것이라 연습 파트에서 제외한다.
+    const WORD_TO_COUNT: Record<string, number> = { 두: 2, 세: 3, 네: 4, 다섯: 5 }
+    for (const lesson of LESSONS) {
+      const intro = lesson.steps[0]
+      if (intro.type !== 'intro') continue
+      const m = /([두세네]|다섯) 부분으로/.exec(intro.text)
+      if (!m) continue
+
+      const sequences = lesson.steps.filter((s) => s.type === 'play_sequence')
+      const practiceParts = sequences.filter((s) => !s.label.endsWith('전체')).length
+      expect(WORD_TO_COUNT[m[1]], `레슨 ${lesson.id} intro: "${intro.text}"`).toBe(practiceParts)
+    }
+  })
+
   it('레슨 1: 도레미 3음을 찾고 3개 시퀀스를 연주한다', () => {
     const [l1] = LESSONS
     expect(l1.steps.filter((s) => s.type === 'find_key')).toHaveLength(3)
