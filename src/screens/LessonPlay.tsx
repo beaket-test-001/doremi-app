@@ -22,6 +22,10 @@ export interface LessonPlayProps {
   startStep?: number
   /** 다음 레슨이 있는지. 레슨 5 완료 화면은 [홈으로]만 보여야 한다 */
   hasNextLesson?: boolean
+  /** 완료 화면에 보여줄 현재 스트릭 일수 (증가 없어도 동일하게 표시) */
+  streakDays?: number
+  /** false 면 ✕ 확인 문구를 '진도가 저장되지 않아요' 로 바꾼다 */
+  canSave?: boolean
   audio: AudioEngine
   /** ✕ — 확인 후 레슨 목록으로 */
   onClose: () => void
@@ -29,6 +33,8 @@ export interface LessonPlayProps {
   onHome: () => void
   /** 진도 저장용 — 스텝이 바뀔 때마다 다음 스텝 인덱스를 알린다 */
   onStepChange?: (stepIndex: number) => void
+  /** 스텝 1개를 완료할 때마다 호출 — 그날 '연습함' 판정에 쓰인다 */
+  onStepCompleted?: () => void
   onComplete: (lessonId: number) => void
   onNextLesson: () => void
 }
@@ -37,10 +43,13 @@ export function LessonPlay({
   lesson,
   startStep = 0,
   hasNextLesson = true,
+  streakDays = 0,
+  canSave = true,
   audio,
   onClose,
   onHome,
   onStepChange,
+  onStepCompleted,
   onComplete,
   onNextLesson,
 }: LessonPlayProps) {
@@ -93,6 +102,9 @@ export function LessonPlay({
       navigator.vibrate?.(VIBRATE_MS)
     }
 
+    // 사양: "'연습함' 인정: 레슨 스텝 1개 이상 완료"
+    if (outcome.stepCompleted) onStepCompleted?.()
+
     goTo(outcome.next)
     if (outcome.lessonCompleted) {
       setFinished(true)
@@ -101,8 +113,8 @@ export function LessonPlay({
   }
 
   function handleClose() {
-    // TODO(저장 PR): localStorage 사용 불가 시 '진도가 저장되지 않아요'로 분기
-    if (confirm('그만할까요? 진도는 저장돼요')) onClose()
+    const tail = canSave ? '진도는 저장돼요' : '진도가 저장되지 않아요'
+    if (confirm(`그만할까요? ${tail}`)) onClose()
   }
 
   if (finished) {
@@ -114,6 +126,8 @@ export function LessonPlay({
         <h1 className="lesson__doneTitle" ref={headingRef} tabIndex={-1}>
           레슨 {lesson.id} 완료!
         </h1>
+        {/* 스트릭은 증가 없어도 현재 값을 그대로 보여준다 (화면 상세 사양) */}
+        <p className="lesson__streak">🔥 현재 스트릭 {streakDays}일</p>
         <div className="lesson__actions">
           {hasNextLesson ? (
             <button type="button" className="btn btn--primary" onClick={onNextLesson}>

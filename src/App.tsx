@@ -1,9 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LESSONS } from './data/lessons'
 import { FreePlay } from './screens/FreePlay'
+import { Home } from './screens/Home'
 import { LessonList } from './screens/LessonList'
 import { LessonPlay } from './screens/LessonPlay'
-import { createAudioEngine } from './services/audio'
+import { createAnalytics, type Analytics } from './services/analytics'
+import { createAudioEngine, type AudioEngine } from './services/audio'
+import { createStorage, type Storage } from './services/storage'
+import { streak, todayStr } from './services/streak'
 
 // 하단 탭 3개. '레슨 플레이'는 탭 없이 전체 화면으로 열리므로 여기 포함하지 않는다.
 const TAB_LABELS = {
@@ -16,49 +20,77 @@ type TabId = keyof typeof TAB_LABELS
 
 const TAB_IDS = Object.keys(TAB_LABELS) as TabId[]
 
-/** 다음 미완료 레슨. 전부 완료했으면 레슨 1 (전체 복습) */
-function nextIncomplete(completed: number[]): number {
-  return LESSONS.find((l) => !completed.includes(l.id))?.id ?? LESSONS[0].id
+/** 자유 연습에서 이만큼 치면 그날 '연습함' 으로 인정 (그날 누적, 세션 무관) */
+const FREE_PLAY_NOTES_FOR_PRACTICE = 10
+
+export interface AppProps {
+  storage?: Storage
+  analytics?: Analytics
+  audio?: AudioEngine
 }
 
-export function App() {
+export function App({ storage, analytics, audio }: AppProps = {}) {
+  const store = useMemo(
+    () => storage ?? createStorage(safeLocalStorage()),
+    [storage],
+  )
+  const track = useMemo(() => analytics ?? createAnalytics(), [analytics])
+  const engine = useMemo(() => audio ?? createAudioEngine(), [audio])
+
   const [tab, setTab] = useState<TabId>('home')
-  const audio = useMemo(() => createAudioEngine(), [])
-
-  // 진도는 아직 메모리에만 있다 — localStorage 연동은 저장 PR에서 붙인다.
-  // 저장 스키마와 같은 모양(completedLessons / currentStep)으로 들고 있어야
-  // 다음 PR 에서 localStorage 어댑터만 갈아끼울 수 있다.
-  const [completed, setCompleted] = useState<number[]>([])
-  const [currentStep, setCurrentStep] = useState(0)
+  const [progress, setProgress] = useState(() => store.loadProgress())
+  const [practiceDates, setPracticeDates] = useState(() => store.loadPractice().dates)
   const [openLessonId, setOpenLessonId] = useState<number | null>(null)
+  // lesson_complete 의 duration 용 — 레슨 진입 시각
+  const lessonStartedAt = useRef(0)
 
-  // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData".
-  // 디코드는 suspended 컨텍스트에서도 되므로 unlock 을 기다릴 필요가 없다.
+  const today = todayStr()
+  const streakDays = streak(practiceDates, today)
+
+  // 사양: "앱 시작 시 샘플 7개를 미리 fetch + decodeAudioData"
   useEffect(() => {
-    audio.loadSamples().catch(() => {})
-  }, [audio])
+    engine.loadSamples().catch(() => {})
+  }, [engine])
 
-  const currentLesson = nextIncomplete(completed)
+  useEffect(() => {
+    track.track('app_open')
+  }, [track])
+
+  /** 오늘을 연습일로 기록. 새로 기록됐으면 streak_updated 를 1회 보낸다 */
+  const markPracticedToday = useCallback(() => {
+    if (!store.markPracticed(today)) return
+    const dates = store.loadPractice().dates
+    setPracticeDates(dates)
+    track.track('streak_updated', { streak_days: streak(dates, today) })
+  }, [store, today, track])
+
+  const currentLesson = LESSONS.find((l) => !progress.completedLessons.includes(l.id))?.id ?? 1
   const openLesson = LESSONS.find((l) => l.id === openLessonId)
-  const isReplay = openLesson ? completed.includes(openLesson.id) : false
+  // 완료 레슨 '다시 하기'·'전체 복습하기' 는 진도를 저장하지 않는다
+  const isReplay = openLesson ? progress.completedLessons.includes(openLesson.id) : false
 
-  function handleComplete(lessonId: number) {
-    setCompleted((prev) => (prev.includes(lessonId) ? prev : [...prev, lessonId]))
-    // currentLesson/currentStep 은 미완료 레슨 전용 — 완료했으면 스텝을 리셋한다
-    setCurrentStep(0)
+  function saveProgress(next: typeof progress) {
+    setProgress(next)
+    store.saveProgress(next)
   }
 
-  // 레슨 플레이는 탭 없이 전체 화면으로 열린다 (닫기 = 레슨 목록으로)
+  function openLessonById(lessonId: number) {
+    setOpenLessonId(lessonId)
+    lessonStartedAt.current = performance.now()
+    track.track('lesson_start', { lesson_id: lessonId })
+  }
+
   if (openLesson) {
     return (
       <div className="app">
         <LessonPlay
           key={openLesson.id}
           lesson={openLesson}
-          // 완료한 레슨을 다시 할 때는 처음부터 — 진도는 미완료 레슨 전용이다
-          startStep={isReplay ? 0 : currentStep}
+          startStep={isReplay ? 0 : progress.currentStep}
           hasNextLesson={LESSONS.some((l) => l.id === openLesson.id + 1)}
-          audio={audio}
+          streakDays={streakDays}
+          canSave={store.available}
+          audio={engine}
           onClose={() => {
             setOpenLessonId(null)
             setTab('lessons')
@@ -68,12 +100,27 @@ export function App() {
             setTab('home')
           }}
           onStepChange={(stepIndex) => {
-            if (!isReplay) setCurrentStep(stepIndex)
+            if (!isReplay) saveProgress({ ...progress, currentLesson: openLesson.id, currentStep: stepIndex })
           }}
-          onComplete={handleComplete}
+          onStepCompleted={markPracticedToday}
+          onComplete={(lessonId) => {
+            // 사양: lesson_complete 는 완료 화면 표시 시점에 lesson_id · duration 과 함께
+            track.track('lesson_complete', {
+              lesson_id: lessonId,
+              duration: Math.round((performance.now() - lessonStartedAt.current) / 1000),
+            })
+            const completedLessons = progress.completedLessons.includes(lessonId)
+              ? progress.completedLessons
+              : [...progress.completedLessons, lessonId]
+            const nextLesson =
+              LESSONS.find((l) => !completedLessons.includes(l.id))?.id ?? LESSONS[0].id
+            // currentLesson/currentStep 은 미완료 레슨 전용 — 완료 시 다음 레슨으로 리셋
+            saveProgress({ completedLessons, currentLesson: nextLesson, currentStep: 0 })
+          }}
           onNextLesson={() => {
             const next = LESSONS.find((l) => l.id === openLesson.id + 1)
-            setOpenLessonId(next?.id ?? null)
+            if (next) openLessonById(next.id)
+            else setOpenLessonId(null)
           }}
         />
       </div>
@@ -97,17 +144,33 @@ export function App() {
           // 비활성 패널은 접근성 트리에서 빼되, aria-controls가 가리킬 수 있도록 DOM에는 남긴다
           hidden={id !== tab}
         >
-          <h1>{TAB_LABELS[id]}</h1>
-          {id === 'lessons' ? (
-            <LessonList
-              completed={completed}
-              currentLesson={currentLesson}
-              currentStep={currentStep}
-              onOpen={setOpenLessonId}
+          {id === 'home' ? (
+            <Home
+              completed={progress.completedLessons}
+              practiceDates={practiceDates}
+              today={today}
+              canSave={store.available}
+              onContinue={openLessonById}
             />
           ) : null}
-          {id === 'practice' ? <FreePlay audio={audio} /> : null}
-          {id === 'home' ? <p className="placeholder">화면 구현 예정</p> : null}
+          {id === 'lessons' ? (
+            <LessonList
+              completed={progress.completedLessons}
+              currentLesson={currentLesson}
+              currentStep={progress.currentLesson === currentLesson ? progress.currentStep : 0}
+              onOpen={openLessonById}
+            />
+          ) : null}
+          {id === 'practice' ? (
+            <PracticeTab
+              active={tab === 'practice'}
+              audio={engine}
+              store={store}
+              track={track}
+              today={today}
+              onPracticed={markPracticedToday}
+            />
+          ) : null}
         </main>
       ))}
 
@@ -129,4 +192,53 @@ export function App() {
       </nav>
     </div>
   )
+}
+
+/** 연습 탭 — practice_start/complete 와 10음 판정을 담당한다 */
+function PracticeTab({
+  active,
+  audio,
+  store,
+  track,
+  today,
+  onPracticed,
+}: {
+  active: boolean
+  audio: AudioEngine
+  store: Storage
+  track: Analytics
+  today: string
+  onPracticed: () => void
+}) {
+  const enteredAt = useRef(0)
+
+  useEffect(() => {
+    if (!active) return
+    track.track('practice_start')
+    enteredAt.current = performance.now()
+    // 탭 이탈 시(언마운트 포함) 체류 시간을 보낸다.
+    // 브라우저 강제 종료로 유실될 수 있으나 MVP 에서는 허용한다 (구현 가이드)
+    return () => {
+      const duration = Math.round((performance.now() - enteredAt.current) / 1000)
+      track.track('practice_complete', { duration })
+    }
+  }, [active, track])
+
+  return (
+    <FreePlay
+      audio={audio}
+      onNotePlayed={() => {
+        if (store.addFreeNotes(today, 1) >= FREE_PLAY_NOTES_FOR_PRACTICE) onPracticed()
+      }}
+    />
+  )
+}
+
+/** 시크릿 모드에서는 localStorage 접근 자체가 던질 수 있다 */
+function safeLocalStorage() {
+  try {
+    return globalThis.localStorage
+  } catch {
+    return undefined
+  }
 }
