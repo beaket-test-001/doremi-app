@@ -7,7 +7,23 @@ import type { Lesson } from '../types'
 import { FLASH_MS, LessonPlay } from './LessonPlay'
 
 function fakeEngine(): AudioEngine {
-  return { unlock: vi.fn(async () => {}), loadSamples: vi.fn(async () => {}), play: vi.fn() }
+  return {
+    unlock: vi.fn(async () => {}),
+    loadSamples: vi.fn(async () => {}),
+    play: vi.fn(),
+    resetStats: vi.fn(),
+    stats: () => ({
+      state: null,
+      baseLatencyMs: null,
+      outputLatencyMs: null,
+      lastInputMs: null,
+      maxInputMs: null,
+      lastDispatchMs: null,
+      maxDispatchMs: null,
+      plays: 0,
+      samplesLoaded: 0,
+    }),
+  }
 }
 
 const L: Lesson = {
@@ -162,7 +178,7 @@ describe('레슨 플레이', () => {
       render(<LessonPlay lesson={L} audio={audio} onClose={() => {}} onHome={() => {}} onComplete={() => {}} onNextLesson={() => {}} />)
       await userEvent.click(screen.getByRole('button', { name: '다음' }))
       press('도')
-      expect(audio.play).toHaveBeenCalledWith('C4')
+      expect(vi.mocked(audio.play).mock.calls.some((c) => c[0] === 'C4')).toBe(true)
     })
 
     it('지원 기기에서는 오답 시 짧게 진동한다', async () => {

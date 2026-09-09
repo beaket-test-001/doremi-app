@@ -22,17 +22,52 @@ const SAMPLE_FORMATS = [
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
 
+/**
+ * 실기기 지연 판정을 위한 계측값 (구현 가이드 '스파이크 합격 기준').
+ *
+ * 무엇을 재고 무엇을 못 재는지 분명히 해 둔다 —
+ * - input: 브라우저가 이벤트를 만든 시각(event.timeStamp) → 핸들러 진입까지.
+ *   디지타이저 샘플링·컴포지터·메인스레드 경합이 여기 들어간다. 실기기에서
+ *   100ms 예산의 지배항이며, 이걸 빼고 합산하면 항상 낙관적으로 나온다
+ * - dispatch: 핸들러 안에서 재생을 예약하는 데 걸린 시간. 앱이 만드는 몫
+ * - output: 브라우저가 보고하는 출력까지의 지연. **iOS Safari 는 미구현**
+ * - 재지 못하는 것: 오디오 콜백 이후 스피커에서 실제로 소리가 나오는 물리 구간
+ */
+export interface AudioStats {
+  state: AudioContextState | null
+  /** 브라우저가 보고하는 처리 버퍼 지연 (ms). 미지원이면 null */
+  baseLatencyMs: number | null
+  /** 브라우저가 보고하는 출력까지의 총 지연 (ms). iOS Safari 등 미지원은 null */
+  outputLatencyMs: number | null
+  /** 이벤트 생성 → 핸들러 진입 (ms). 이벤트 시각을 넘기지 않으면 null */
+  lastInputMs: number | null
+  maxInputMs: number | null
+  /** 핸들러 진입 → 재생 예약 완료 (ms) */
+  lastDispatchMs: number | null
+  maxDispatchMs: number | null
+  plays: number
+  /** 샘플이 로드된 음 수 (0 이면 합성음으로 동작 중) */
+  samplesLoaded: number
+}
+
 export interface AudioEngine {
   /** 첫 사용자 제스처에서 호출. 무음 재생으로 오디오 세션을 깨우고 resume (iOS 필수) */
   unlock(): Promise<void>
   /** 피아노 샘플 7개를 받아 디코드. 앱 시작 시 호출 가능 — unlock 을 기다리지 않는다 */
   loadSamples(): Promise<void>
-  /** 즉시 발음. 샘플이 있으면 버퍼, 없으면 합성음 */
-  play(note: Note): void
+  /**
+   * 즉시 발음. 샘플이 있으면 버퍼, 없으면 합성음.
+   * eventTimeStampMs 를 넘기면 입력 지연(이벤트 생성 → 핸들러 진입)도 기록한다.
+   */
+  play(note: Note, eventTimeStampMs?: number): void
+  /** 지연 계측값. 실기기 QA 에서 체감이 아니라 실측으로 판정하기 위한 것 */
+  stats(): AudioStats
+  /** 계측값 초기화. 한 번의 이상치가 최댓값에 영구 고착되는 것을 풀어 준다 */
+  resetStats(): void
 }
 
 export interface AudioEngineOptions {
-  contextFactory?: () => AudioContext
+  contextFactory?: (options?: AudioContextOptions) => AudioContext
   fetchImpl?: typeof fetch
   /** iOS 무음 스위치 해제용 무음 재생. 테스트에서 교체한다 */
   playSilentAudio?: () => Promise<void>
@@ -50,7 +85,9 @@ async function defaultPlaySilentAudio(): Promise<void> {
 
 export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine {
   const {
-    contextFactory = () => new AudioContext(),
+    // 'interactive' 는 스펙 기본값이라 실효는 없지만, 이 앱이 낮은 지연을
+    // 요구한다는 의도를 코드에 남겨 둔다 (나중에 기본값이 바뀌어도 안전).
+    contextFactory = (o) => new AudioContext(o),
     fetchImpl = globalThis.fetch?.bind(globalThis),
     playSilentAudio = defaultPlaySilentAudio,
     canPlayType = (mime) => new Audio().canPlayType(mime),
@@ -64,6 +101,12 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   let loadPromise: Promise<void> | null = null
   const samples = new Map<Note, AudioBuffer>()
 
+  let plays = 0
+  let lastInputMs: number | null = null
+  let maxInputMs: number | null = null
+  let lastDispatchMs: number | null = null
+  let maxDispatchMs: number | null = null
+
   // AudioContext 는 제스처 밖에서 만들어도 된다 (suspended 로 시작할 뿐).
   // 제스처가 필요한 건 resume() 뿐이므로 생성은 동기로 끝낸다 —
   // 이렇게 해야 unlock() 직후의 동기 play() 도 음을 예약할 수 있다.
@@ -74,7 +117,7 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
   function ensureContext(): AudioContext | null {
     if (ctx) return ctx
     try {
-      const context = contextFactory()
+      const context = contextFactory({ latencyHint: 'interactive' })
       const gain = context.createGain()
       gain.gain.value = MASTER_GAIN
       gain.connect(context.destination)
@@ -224,12 +267,56 @@ export function createAudioEngine(options: AudioEngineOptions = {}): AudioEngine
     osc.stop(now + SYNTH_DECAY_S)
   }
 
-  function play(note: Note): void {
+  function play(note: Note, eventTimeStampMs?: number): void {
     if (!ctx || !master) return // 컨텍스트가 아직 없으면 조용히 무시
+
+    const start = performance.now()
+
+    // event.timeStamp 는 브라우저가 이벤트를 만든 시각이고 performance.now() 와
+    // 같은 시간 기준을 쓴다. 이 차이가 터치→핸들러 진입 지연이며 실기기에서
+    // 100ms 예산의 지배항이다. 음수·비정상값은 버린다(합성 이벤트 등).
+    if (typeof eventTimeStampMs === 'number' && eventTimeStampMs > 0) {
+      const input = start - eventTimeStampMs
+      if (input >= 0 && input < 10_000) {
+        lastInputMs = input
+        maxInputMs = Math.max(maxInputMs ?? 0, input)
+      }
+    }
+
     const buffer = samples.get(note)
     if (buffer) playSample(ctx, buffer)
     else playSynth(ctx, note)
+
+    lastDispatchMs = performance.now() - start
+    maxDispatchMs = Math.max(maxDispatchMs ?? 0, lastDispatchMs)
+    plays += 1
   }
 
-  return { unlock, loadSamples, play }
+  function resetStats(): void {
+    plays = 0
+    lastInputMs = null
+    maxInputMs = null
+    lastDispatchMs = null
+    maxDispatchMs = null
+  }
+
+  function toMs(seconds: number | undefined): number | null {
+    return typeof seconds === 'number' ? seconds * 1000 : null
+  }
+
+  function stats(): AudioStats {
+    return {
+      state: ctx?.state ?? null,
+      baseLatencyMs: toMs(ctx?.baseLatency),
+      outputLatencyMs: toMs(ctx?.outputLatency),
+      lastInputMs,
+      maxInputMs,
+      lastDispatchMs,
+      maxDispatchMs,
+      plays,
+      samplesLoaded: samples.size,
+    }
+  }
+
+  return { unlock, loadSamples, play, stats, resetStats }
 }

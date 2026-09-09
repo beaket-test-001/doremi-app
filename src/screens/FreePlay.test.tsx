@@ -9,6 +9,18 @@ function fakeEngine(): AudioEngine {
     unlock: vi.fn(async () => {}),
     loadSamples: vi.fn(async () => {}),
     play: vi.fn(),
+    resetStats: vi.fn(),
+    stats: () => ({
+      state: null,
+      baseLatencyMs: null,
+      outputLatencyMs: null,
+      lastInputMs: null,
+      maxInputMs: null,
+      lastDispatchMs: null,
+      maxDispatchMs: null,
+      plays: 0,
+      samplesLoaded: 0,
+    }),
   }
 }
 
@@ -42,7 +54,8 @@ describe('자유 연습 화면', () => {
     const audio = fakeEngine()
     render(<FreePlay audio={audio} />)
     press('솔')
-    expect(audio.play).toHaveBeenCalledExactlyOnceWith('G4')
+    expect(audio.play).toHaveBeenCalledOnce()
+    expect(vi.mocked(audio.play).mock.calls[0][0]).toBe('G4')
   })
 
   it('첫 터치에서 오디오를 unlock한다 (iOS 자동재생 정책)', () => {

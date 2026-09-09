@@ -88,14 +88,14 @@ export function LessonPlay({
     if (next.stepIndex !== state.stepIndex) onStepChange?.(next.stepIndex)
   }
 
-  function handlePress(note: Note) {
+  function handlePress(note: Note, eventTimeStampMs: number) {
     audio.unlock().catch(() => {})
 
     const outcome = press(lesson, state, note)
     if (!outcome) return // intro 스텝 — 건반이 없으므로 도달하지 않는다
 
     // 오답도 "해당 건반 소리"를 낸다 (화면 상세 사양)
-    audio.play(outcome.soundNote)
+    audio.play(outcome.soundNote, eventTimeStampMs)
     showFlash({ note, verdict: outcome.verdict })
 
     // 색과 진동만으로 판정을 전달하면 스크린리더·색약 사용자가 알 수 없다 (WCAG 1.4.1)

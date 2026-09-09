@@ -15,6 +15,8 @@ function mockAudioContext() {
   const ctx = {
     state: 'suspended' as AudioContextState,
     currentTime: 0,
+    baseLatency: undefined as number | undefined,
+    outputLatency: undefined as number | undefined,
     destination: {},
     resume: vi.fn(async () => {
       ctx.state = 'running'
@@ -94,6 +96,121 @@ describe('오디오 엔진', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  describe('지연 계측', () => {
+    it("AudioContext 를 latencyHint: 'interactive' 로 만든다", () => {
+      const opts: AudioContextOptions[] = []
+      const engine = createAudioEngine({
+        contextFactory: (o) => {
+          opts.push(o ?? {})
+          return mock.ctx as unknown as AudioContext
+        },
+      })
+      void engine.unlock()
+      expect(opts).toHaveLength(1)
+      expect(opts[0].latencyHint).toBe('interactive')
+    })
+
+    it('play 가 pointerdown → 재생 예약까지의 소요 시간을 기록한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      expect(engine.stats().plays).toBe(0)
+
+      engine.play('C4')
+      const s = engine.stats()
+      expect(s.plays).toBe(1)
+      expect(s.lastDispatchMs).toBeGreaterThanOrEqual(0)
+      expect(s.maxDispatchMs).toBeGreaterThanOrEqual(s.lastDispatchMs ?? 0)
+    })
+
+    it('브라우저가 보고하는 base · output 지연을 노출한다', async () => {
+      mock.ctx.baseLatency = 0.005
+      mock.ctx.outputLatency = 0.021
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      const s = engine.stats()
+      expect(s.baseLatencyMs).toBeCloseTo(5, 1)
+      expect(s.outputLatencyMs).toBeCloseTo(21, 1)
+    })
+
+    it('컨텍스트가 없으면 지연 값은 null 이다', () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      const s = engine.stats()
+      expect(s.baseLatencyMs).toBeNull()
+      expect(s.outputLatencyMs).toBeNull()
+      expect(s.state).toBeNull()
+    })
+
+    it('브라우저가 outputLatency 를 지원하지 않으면 null 이다', async () => {
+      mock.ctx.baseLatency = 0.005
+      mock.ctx.outputLatency = undefined
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      expect(engine.stats().outputLatencyMs).toBeNull()
+      expect(engine.stats().baseLatencyMs).toBeCloseTo(5, 1)
+    })
+
+    it('여러 번 연주하면 최댓값이 누적된다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      const now = performance.now()
+      // 입력 지연 5ms → 40ms → 10ms. 최댓값은 40ms 로 남아야 한다
+      engine.play('C4', now - 5)
+      engine.play('D4', now - 40)
+      engine.play('E4', now - 10)
+      const s = engine.stats()
+      expect(s.plays).toBe(3)
+      expect(s.maxInputMs).toBeGreaterThanOrEqual(40)
+      expect(s.lastInputMs).toBeLessThan(s.maxInputMs!)
+      expect(s.maxDispatchMs).toBeGreaterThanOrEqual(s.lastDispatchMs ?? 0)
+    })
+
+    it('이벤트 시각으로 입력 지연(터치 → 핸들러)을 기록한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() - 37)
+      expect(engine.stats().lastInputMs).toBeGreaterThanOrEqual(37)
+    })
+
+    it('이벤트 시각을 넘기지 않으면 입력 지연은 null 이다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4')
+      expect(engine.stats().lastInputMs).toBeNull()
+    })
+
+    it('비정상적인 이벤트 시각은 버린다 (합성 이벤트 · 시계 역행)', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() + 5000) // 미래
+      engine.play('D4', 0) // timeStamp 0
+      engine.play('E4', performance.now() - 999_999) // 비정상적으로 큼
+      expect(engine.stats().lastInputMs).toBeNull()
+      expect(engine.stats().plays).toBe(3)
+    })
+
+    it('baseLatency 가 0 이어도 null 로 뭉개지 않는다', async () => {
+      mock.ctx.baseLatency = 0
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      // 0 을 falsy 로 처리하면 미지원과 구분되지 않는다
+      expect(engine.stats().baseLatencyMs).toBe(0)
+    })
+
+    it('resetStats 로 최댓값 고착을 해제한다', async () => {
+      const engine = createAudioEngine({ contextFactory: factory })
+      await engine.unlock()
+      engine.play('C4', performance.now() - 80)
+      expect(engine.stats().maxInputMs).toBeGreaterThanOrEqual(80)
+
+      engine.resetStats()
+      const s = engine.stats()
+      expect(s.plays).toBe(0)
+      expect(s.maxInputMs).toBeNull()
+      expect(s.lastInputMs).toBeNull()
+      expect(s.maxDispatchMs).toBeNull()
+    })
   })
 
   describe('컨텍스트 수명주기', () => {
